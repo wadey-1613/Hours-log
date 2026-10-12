@@ -574,6 +574,8 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 
   var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2 };
   var PAYFIX = { taxCode: '509L', pensionPct: 4, pensionQual: true, pensionPre: false, sickPay: 24.65, payModel: 2 };
+  var DEFAULT_CLIENT = '437915088090-7sravt763njs7of5pcm3kked3ollu4c5.apps.googleusercontent.com';
+  var clientId = function () { return String(settings.gClientId || DEFAULT_CLIENT).trim(); };
   var TYPES = { holiday: 'Holiday', bank: 'Bank holiday', sick: 'Sick' };
   var isOpen = function (e) { return !!(e && !e.type && e.start && !e.end); };
   var fixDate = '';
@@ -1473,7 +1475,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     $('#sPenPre').checked = !!settings.pensionPre;
     $('#sHolDays').value = Number(settings.holDays) > 0 ? settings.holDays : '';
     $('#sHolStart').value = String(Number(settings.holStart) || 1);
-    $('#sClient').value = settings.gClientId || '';
+    $('#sClient').value = clientId();
   }
   $('#saveSetup').addEventListener('click', async function () {
     settings = {
@@ -1554,7 +1556,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
       $('#outlookLink').href = 'https://outlook.office.com/mail/deeplink/compose?to=' + encodeURIComponent(to.join(',')) + '&subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(bodyText()).replace(/%0A/g, '%0D%0A');
     }
     $('#sheet').hidden = false;
-    if ((settings.gClientId || '').trim()) loadGIS().catch(function () {});
+    if (clientId()) loadGIS().catch(function () {});
   }
   function closeEmail() { $('#sheet').hidden = true; }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -1648,7 +1650,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   }
   async function gToken() {
     if (gTok && Date.now() < gExp) return gTok;
-    var cid = (settings.gClientId || '').trim();
+    var cid = clientId();
     if (!cid) throw { code: 'noclient' };
     try { await loadGIS(); } catch (e) { throw { code: 'offline' }; }
     return new Promise(function (resolve, reject) {
