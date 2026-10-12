@@ -1,0 +1,1881 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hours Log</title>
+<meta name="theme-color" content="#0a6c8b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hours Log">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+html, body { margin: 0; }
+html { -webkit-text-size-adjust: 100%; }
+/* Layout: phone-first single column. Three tabs along the bottom: Day (enter hours), Week (the sheet, email, download), Setup (recipients and defaults). */
+:root {
+  --bg: #edf0f3;
+  --surface: #ffffff;
+  --ink: #16212b;
+  --muted: #566676;
+  --line: #d3dae1;
+  --accent: #0a6c8b;
+  --accent-ink: #ffffff;
+  --accent-soft: #d9edf3;
+  --night: #7a4f00;
+  --night-bg: #fbebcb;
+  --danger: #a3332b;
+  --scrim: rgba(15, 25, 35, 0.45);
+  --font-display: "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161c;
+    --surface: #17212a;
+    --ink: #e6edf3;
+    --muted: #93a3b1;
+    --line: #2a3947;
+    --accent: #4fb6d6;
+    --accent-ink: #06222c;
+    --accent-soft: #123341;
+    --night: #f0c26a;
+    --night-bg: #3a2d10;
+    --danger: #ff8d84;
+    --scrim: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161c;
+  --surface: #17212a;
+  --ink: #e6edf3;
+  --muted: #93a3b1;
+  --line: #2a3947;
+  --accent: #4fb6d6;
+  --accent-ink: #06222c;
+  --accent-soft: #123341;
+  --night: #f0c26a;
+  --night-bg: #3a2d10;
+  --danger: #ff8d84;
+  --scrim: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  padding-inline: 16px;
+  padding-block: env(safe-area-inset-top, 0px) 96px;
+}
+.app { max-width: 520px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 18px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.75rem; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.who { color: var(--muted); font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; margin: 0; text-wrap: balance; }
+.label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field input, .field textarea {
+  width: 100%; min-height: 48px; padding: 10px 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  font-size: 16px;
+}
+.field textarea { min-height: 96px; resize: vertical; }
+.field input[type="time"], .field input[type="number"] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); font-size: 0.8125rem; margin: 0; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.timesel { display: flex; align-items: center; gap: 4px; }
+.timesel select { flex: 1; min-width: 0; min-height: 48px; padding: 0 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 1.125rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ink); text-align: center; text-align-last: center; }
+.timesel .colon { font-family: var(--font-mono); font-weight: 600; color: var(--muted); }
+.dayhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dow { font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1; }
+.dlong { color: var(--muted); font-size: 1rem; }
+.todaytag { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 10px; }
+.todaytag[hidden] { display: none; }
+
+.datebar { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: stretch; }
+.iconbtn { min-height: 48px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 1.25rem; line-height: 1; }
+.datebar .field input { text-align: center; font-family: var(--font-body); font-weight: 500; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips.types .chip { font-family: var(--font-body); font-weight: 500; }
+.fixcard { border-color: var(--night); background: var(--night-bg); color: var(--night); }
+.fixcard p { margin: 0; font-weight: 500; }
+.fixcard .btn { min-height: 48px; }
+.fixcard .btn.ghost { color: var(--night); border-color: var(--night); }
+.fixcard .timesel select { color: var(--ink); }
+.fixcard[hidden] { display: none; }
+.warnline { color: var(--night); font-weight: 500; }
+.warnline:empty { display: none; }
+.chip { min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--bg); font-family: var(--font-mono); font-size: 0.875rem; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
+.switch .txt { display: flex; flex-direction: column; min-width: 0; }
+.switch .txt b { font-weight: 600; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.track { flex: none; width: 56px; height: 32px; border-radius: 16px; background: var(--line); position: relative; transition: background 0.15s; }
+.track::after { content: ""; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.15s; }
+.switch input:checked + .track { background: var(--night); }
+.switch input:checked + .track::after { transform: translateX(24px); }
+.switch input:focus-visible + .track { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .track, .track::after { transition: none; } }
+
+.readout { display: flex; flex-direction: column; gap: 12px; }
+.readout .big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.num { font-family: var(--font-mono); font-weight: 600; font-size: 3.25rem; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.dec { font-family: var(--font-mono); color: var(--muted); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.scale { position: relative; height: 14px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); }
+.seg { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
+.ticks { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.6875rem; color: var(--muted); }
+.status { font-size: 0.875rem; color: var(--muted); min-height: 1.3em; }
+.status.ok { color: var(--accent); font-weight: 600; }
+
+.btn { min-height: 52px; padding: 0 20px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 1rem; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.plain { border-color: transparent; background: transparent; color: var(--danger); min-height: 44px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.weeknav { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; }
+.weeknav .mid { text-align: center; }
+.weeknav .mid div:last-child { font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; }
+.sum { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; align-items: end; }
+.sum .big { font-family: var(--font-mono); font-weight: 600; font-size: 2.25rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.sum .mid2 { font-family: var(--font-mono); font-weight: 600; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; margin-inline: -16px; padding-inline: 16px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 0 6px 8px 0; white-space: nowrap; }
+td { padding: 0; border-top: 1px solid var(--line); }
+td button { all: unset; box-sizing: border-box; display: block; width: 100%; min-height: 48px; padding: 12px 6px 12px 0; cursor: pointer; font-family: var(--font-mono); font-size: 0.875rem; }
+td:first-child button { font-family: var(--font-body); font-weight: 500; }
+tr.empty td button { color: var(--muted); }
+td button:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+td.t button { font-weight: 600; }
+.pill { display: inline-block; font-family: var(--font-body); font-size: 0.6875rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--night-bg); color: var(--night); }
+
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 5; }
+.tabs .inner { display: grid; grid-template-columns: repeat(5, 1fr); width: 100%; max-width: 520px; }
+.tab { background: none; border: 0; border-top: 3px solid transparent; min-height: 60px; font-family: var(--font-display); font-weight: 600; font-size: 1.0625rem; letter-spacing: 0.02em; color: var(--muted); }
+.tab[aria-selected="true"] { color: var(--accent); border-top-color: var(--accent); }
+
+.sheet { position: fixed; inset: 0; background: var(--scrim); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
+.sheet[hidden] { display: none; }
+.panel { background: var(--surface); width: 100%; max-width: 520px; max-height: 92%; overflow-y: auto; border-radius: 14px 14px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.panel .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.copyrow { display: flex; gap: 8px; align-items: flex-start; }
+.copyrow .sel { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 0.9375rem; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+.copyrow .btn { min-height: 44px; padding: 0 14px; font-size: 0.875rem; }
+pre.sel { margin: 0; white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.5; max-height: 220px; overflow-y: auto; }
+a.btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.panel .field .sel { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 0.9375rem; overflow-wrap: anywhere; }
+.panel .field pre.sel { font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.5; white-space: pre-wrap; max-height: 200px; overflow-y: auto; margin: 0; }
+details.more summary { min-height: 44px; display: flex; align-items: center; color: var(--muted); cursor: pointer; font-size: 0.9375rem; }
+.weeklist { display: flex; flex-direction: column; }
+.wk { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; min-height: 60px; padding-block: 8px; border-top: 1px solid var(--line); cursor: pointer; }
+.wk:first-child { border-top: 0; }
+.wk input { width: 24px; height: 24px; accent-color: var(--accent); margin: 0; }
+.wk .s { color: var(--muted); font-size: 0.8125rem; }
+.wk .t { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.wk.off { opacity: 0.5; cursor: default; }
+.monthhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.linkbtn { background: none; border: 0; color: var(--accent); font-weight: 600; min-height: 44px; padding: 0 4px; }
+.linkbtn:disabled { opacity: 0.4; }
+.clockrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn.big { min-height: 68px; font-size: 1.1875rem; }
+label.btn { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.panel .field .mailprev { background: #ffffff; color: #1b2733; padding: 12px; max-height: 280px; overflow: auto; }
+
+.line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.line:first-child { border-top: 0; }
+.line .v { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.line .sub { color: var(--muted); font-size: 0.8125rem; }
+.line.total { border-top: 2px solid var(--ink); font-weight: 700; }
+.line.neg .v { color: var(--muted); }
+.num.money { font-size: 2.75rem; }
+.viewer { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; }
+.viewer .vbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.viewer .vbar .btn { min-height: 44px; padding: 0 14px; font-size: 0.9375rem; }
+.viewer .vbody { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+.viewer .vbody img { display: block; width: 100%; height: auto; }
+.viewer .vbody iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.viewer .vmsg { padding: 10px 12px; font-size: 0.875rem; color: var(--muted); }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-width: 488px; margin-inline: auto; background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 8px; z-index: 20; font-size: 0.9375rem; }
+.toast[hidden] { display: none; }
+</style>
+
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Hours Log</h1>
+    <span class="who" id="who"></span>
+  </header>
+
+  <p class="hint warnline" id="syncNote" hidden></p>
+
+  <main>
+    <section id="view-day">
+      <div class="card fixcard" id="fixCard" hidden>
+        <div class="label" style="color:inherit">Missing finish time</div>
+        <p id="fixText"></p>
+        <div class="timesel" data-for="fixEnd"></div><input type="hidden" id="fixEnd">
+        <div class="row2">
+          <button class="btn" id="fixSave">Save finish</button>
+          <button class="btn ghost" id="fixEdit">Open day</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">Clock</div>
+        <div class="clockrow">
+          <button class="btn big" id="btnStart">Start work</button>
+          <button class="btn big ghost" id="btnFinish">Finish work</button>
+        </div>
+        <div class="status" id="clockMsg" aria-live="polite"></div>
+      </div>
+
+      <div class="dayhead"><span class="dow" id="dow"></span><span class="dlong" id="dlong"></span><span class="todaytag" id="todayTag" hidden>Today</span></div>
+      <div class="datebar">
+        <button class="iconbtn" id="prevDay" aria-label="Previous day">&lsaquo;</button>
+        <div class="field"><input type="date" id="dayDate" aria-label="Date"></div>
+        <button class="iconbtn" id="nextDay" aria-label="Next day">&rsaquo;</button>
+      </div>
+
+      <div class="card">
+        <div class="field">
+          <span class="label">Type of day</span>
+          <div class="chips types" id="typeChips">
+            <button type="button" class="chip" data-t="" aria-pressed="true">Work</button>
+            <button type="button" class="chip" data-t="holiday" aria-pressed="false">Holiday</button>
+            <button type="button" class="chip" data-t="bank" aria-pressed="false">Bank holiday</button>
+            <button type="button" class="chip" data-t="sick" aria-pressed="false">Sick</button>
+          </div>
+          <input type="hidden" id="dtype" value="">
+          <p class="hint" id="holHint" hidden></p>
+        </div>
+        <div id="workFields" class="stack" style="gap:16px">
+        <div class="row2">
+          <div class="field"><span class="label">Start</span><div class="timesel" data-for="tStart"></div><input type="hidden" id="tStart"></div>
+          <div class="field"><span class="label">Finish</span><div class="timesel" data-for="tEnd"></div><input type="hidden" id="tEnd"></div>
+        </div>
+        <div class="field">
+          <label class="label" for="brk">Break (minutes)</label>
+          <input type="number" id="brk" inputmode="numeric" min="0" max="600" step="15">
+          <div class="chips" id="chips">
+            <button type="button" class="chip" data-m="0" aria-pressed="false">0</button>
+            <button type="button" class="chip" data-m="15" aria-pressed="false">15</button>
+            <button type="button" class="chip" data-m="30" aria-pressed="false">30</button>
+            <button type="button" class="chip" data-m="45" aria-pressed="false">45</button>
+            <button type="button" class="chip" data-m="60" aria-pressed="false">60</button>
+          </div>
+        </div>
+        <label class="switch">
+          <span class="txt"><b>Night away</b><span class="hint">Counted on the weekly sheet</span></span>
+          <input type="checkbox" id="night">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+        </div>
+        <div class="field"><label class="label" for="note">Site or job (optional)</label><input type="text" id="note" maxlength="120" placeholder="e.g. HMP visit, stadium ECG round"></div>
+      </div>
+
+      <div class="card readout">
+        <div class="label">Worked</div>
+        <div class="big"><span class="num" id="total">0:00</span><span class="dec" id="dec">0.00 h</span></div>
+        <div>
+          <div class="scale" id="scale" aria-hidden="true"></div>
+          <div class="ticks" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+        </div>
+        <div class="status" id="status" aria-live="polite"></div>
+      </div>
+
+      <div class="stack">
+        <button class="btn" id="saveDay">Save day</button>
+        <button class="btn plain" id="delDay" hidden>Delete this day</button>
+      </div>
+    </section>
+
+    <section id="view-week" hidden>
+      <div class="weeknav">
+        <button class="iconbtn" id="prevWeek" aria-label="Previous week">&lsaquo;</button>
+        <div class="mid"><div class="label">Week commencing</div><div id="weekLabel"></div></div>
+        <button class="iconbtn" id="nextWeek" aria-label="Next week">&rsaquo;</button>
+      </div>
+
+      <div class="card">
+        <div class="sum">
+          <div><div class="label">Total hours</div><div class="big" id="wTotal">0:00</div><div class="dec" id="wDec"></div></div>
+          <div><div class="label">Days</div><div class="mid2" id="wDays">0</div></div>
+          <div><div class="label">Nights away</div><div class="mid2" id="wNights">0</div></div>
+        </div>
+        <p class="hint" id="wTarget"></p>
+      </div>
+
+      <div class="card">
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Day</th><th>Start</th><th>Finish</th><th>Break</th><th>Night</th><th>Total</th></tr></thead>
+            <tbody id="weekRows"></tbody>
+          </table>
+        </div>
+        <p class="hint warnline" id="wOpen"></p>
+        <p class="hint">Tap a day to edit it.</p>
+      </div>
+
+      <div class="stack">
+        <button class="btn" id="emailBtn">Email timesheet</button>
+        <button class="btn ghost" id="dlBtn">Download spreadsheet</button>
+      </div>
+    </section>
+
+    <section id="view-month" hidden>
+      <div class="weeknav">
+        <button class="iconbtn" id="prevMonth" aria-label="Previous month">&lsaquo;</button>
+        <div class="mid"><div class="label">Month</div><div id="monthLabel"></div></div>
+        <button class="iconbtn" id="nextMonth" aria-label="Next month">&rsaquo;</button>
+      </div>
+
+      <div class="card">
+        <div class="sum">
+          <div><div class="label">Ticked hours</div><div class="big" id="mTotal">0:00</div><div class="dec" id="mDec"></div></div>
+          <div><div class="label">Days</div><div class="mid2" id="mDays">0</div></div>
+          <div><div class="label">Nights away</div><div class="mid2" id="mNights">0</div></div>
+        </div>
+        <p class="hint" id="pickList"></p>
+      </div>
+
+      <div class="card">
+        <div class="monthhead"><span class="label">Tick the weeks to send</span><button class="linkbtn" id="mAll">Select all</button></div>
+        <div class="weeklist" id="monthWeeks"></div>
+        <p class="hint" id="monthHint"></p>
+      </div>
+
+      <div class="stack">
+        <button class="btn" id="monthSend">Send ticked weeks</button>
+      </div>
+    </section>
+
+    <section id="view-pay" hidden>
+      <div class="weeknav">
+        <button class="iconbtn" id="prevPay" aria-label="Previous month">&lsaquo;</button>
+        <div class="mid"><div class="label">Pay for</div><div id="payLabel"></div></div>
+        <button class="iconbtn" id="nextPay" aria-label="Next month">&rsaquo;</button>
+      </div>
+      <div class="card">
+        <div class="label">Estimated take-home</div>
+        <div class="num money" id="pNet">£0.00</div>
+        <p class="hint" id="pHours"></p>
+        <div id="pLines"></div>
+        <p class="hint" id="pWarn"></p>
+      </div>
+      <div class="card">
+        <div class="label">Weeks counted</div>
+        <div id="pWeeks"></div>
+      </div>
+      <div class="card">
+        <div class="label">Extras for this month</div>
+        <div class="row2">
+          <div class="field"><label class="label" for="exBonus">Bonus / extra pay (£)</label><input type="number" id="exBonus" inputmode="decimal" min="0" step="0.01"></div>
+          <div class="field"><label class="label" for="exDeduct">Other deductions (£)</label><input type="number" id="exDeduct" inputmode="decimal" min="0" step="0.01"></div>
+        </div>
+        <p class="hint">Bonus is taxed and counts for pension. Other deductions, such as a parking fine, come off after tax.</p>
+        <button class="btn ghost" id="saveExtras">Save extras</button>
+      </div>
+      <div class="card" id="slipCard">
+        <div class="label">Payslip</div>
+        <div id="slipBody"></div>
+        <label class="btn" for="slipFile" id="slipLbl">Add payslip</label>
+        <input type="file" id="slipFile" accept="application/pdf,image/*" hidden>
+        <p class="hint" id="slipMsg"></p>
+        <div class="field"><label class="label" for="actNet">Actual take-home (£)</label><input type="number" id="actNet" inputmode="decimal" min="0" step="0.01" placeholder="From your payslip"></div>
+        <button class="btn ghost" id="saveAct">Save take-home</button>
+        <p class="hint" id="actDiff"></p>
+      </div>
+      <div class="card">
+        <div class="label">Holiday</div>
+        <div class="dow" id="holBig" style="font-size:1.75rem"></div>
+        <p class="hint" id="holYear"></p>
+      </div>
+      <p class="hint">This is an estimate, not a payslip. Weeks belong to the month their Friday falls in. The last week of the month is paid up to your cap and any hours over it are paid the next month at the same rate. Tax is worked out month by month, so your real payslip can differ by a few pounds. Bonuses and one-off deductions go in Extras for the month. Student loans are not included.</p>
+    </section>
+
+    <section id="view-setup" hidden>
+      <div class="card">
+        <h2>Who gets the timesheet</h2>
+        <div class="field"><label class="label" for="sName">Your name</label><input type="text" id="sName" autocomplete="name"></div>
+        <div class="field"><label class="label" for="sMe">Your email</label><input type="email" id="sMe" inputmode="email" autocomplete="email"></div>
+        <div class="field">
+          <label class="label" for="sOffice">Office email addresses</label>
+          <textarea id="sOffice" placeholder="One per line"></textarea>
+          <p class="hint">Everyone listed here, plus you, is addressed when you press Email timesheet.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Usual day</h2>
+        <p class="hint">Used to fill in a new day. You can change it on the day.</p>
+        <div class="row3">
+          <div class="field"><span class="label">Start</span><div class="timesel" data-for="sStart"></div><input type="hidden" id="sStart"></div>
+          <div class="field"><span class="label">Finish</span><div class="timesel" data-for="sEnd"></div><input type="hidden" id="sEnd"></div>
+          <div class="field"><label class="label" for="sBrk">Break (minutes)</label><input type="number" id="sBrk" inputmode="numeric" min="0" max="600" step="15"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Pay</h2>
+        <div class="row2">
+          <div class="field"><label class="label" for="sRate">Hourly rate (£)</label><input type="number" id="sRate" inputmode="decimal" min="0" step="0.01"></div>
+          <div class="field"><label class="label" for="sPension">Pension (%)</label><input type="number" id="sPension" inputmode="decimal" min="0" max="100" step="0.5"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="label" for="sTax">Tax code</label><input type="text" id="sTax" autocapitalize="characters" maxlength="8"></div>
+          <div class="field"><label class="label" for="sCap">Last week paid up to (hours)</label><input type="number" id="sCap" inputmode="decimal" min="0" max="80" step="0.25"></div>
+        </div>
+        <p class="hint">Overtime is paid at the same hourly rate. The last week of each month is paid up to the cap and the extra hours are paid the next month. Leave the cap blank for no cap.</p>
+        <label class="switch"><span class="txt"><b>Holiday and bank holiday paid</b><span class="hint">Each counts as 8 hours at the hourly rate</span></span><input type="checkbox" id="sPaidHol"><span class="track" aria-hidden="true"></span></label>
+        <div class="field"><label class="label" for="sSick">Sick pay per day (£)</label><input type="number" id="sSick" inputmode="decimal" min="0" step="0.01"><p class="hint">Your payslip shows 24.65 a day for sick pay. Leave blank if sick days are unpaid.</p></div>
+        <label class="switch"><span class="txt"><b>Pension only on pay above £520 a month</b><span class="hint">Your payslip does this. Switch off to take the percentage from all pay</span></span><input type="checkbox" id="sPenQual"><span class="track" aria-hidden="true"></span></label>
+        <label class="switch"><span class="txt"><b>Pension comes off before tax</b><span class="hint">Your payslip taxes your full pay, so this is off</span></span><input type="checkbox" id="sPenPre"><span class="track" aria-hidden="true"></span></label>
+      </div>
+      <div class="card">
+        <h2>Holiday allowance</h2>
+        <div class="row2">
+          <div class="field"><label class="label" for="sHolDays">Days per year</label><input type="number" id="sHolDays" inputmode="decimal" min="0" max="100" step="0.5"></div>
+          <div class="field"><label class="label" for="sHolStart">Leave year starts</label><select id="sHolStart" style="min-height:48px;padding:0 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;font-size:16px;color:var(--ink)"></select></div>
+        </div>
+        <p class="hint">Only days marked Holiday are counted. Bank holidays are not taken off your allowance.</p>
+      </div>
+      <div class="card">
+        <h2>Contracted hours</h2>
+        <div class="field"><label class="label" for="sTarget">Hours per week</label><input type="number" id="sTarget" inputmode="decimal" min="0" max="80" step="0.25"><p class="hint">The Week page shows how far over or under you are. Holiday, bank holiday and sick days reduce the target by one day each. Leave blank to switch it off.</p></div>
+      </div>
+      <div class="card">
+        <h2>Send from Gmail</h2>
+        <div class="field"><label class="label" for="sClient">Google sign-in code (Client ID)</label><input type="text" id="sClient" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Ends in .apps.googleusercontent.com"></div>
+        <p class="hint">Needed once so the app can send email from your Gmail. Until you add it, use Share to Mail or Outlook when you send.</p>
+        <details class="more">
+          <summary>How to get the code (on a computer)</summary>
+          <ol class="hint" style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+            <li>Go to console.cloud.google.com and sign in with your Gmail. Create a project called Hours Log.</li>
+            <li>Open APIs and Services, then Library. Search for Gmail API and press Enable.</li>
+            <li>Open OAuth consent screen. Choose External, fill in the app name and your email, and under Test users add your own Gmail address.</li>
+            <li>Open Credentials, then Create credentials, then OAuth client ID. Choose Web application.</li>
+            <li>Under Authorised JavaScript origins add <b>https://wadey-1613.github.io</b></li>
+            <li>Press Create, copy the Client ID and paste it above.</li>
+          </ol>
+          <p class="hint">The first time you send, Google says the app is not verified. That is normal for your own app: press Advanced, then continue.</p>
+        </details>
+      </div>
+      <div class="stack">
+        <button class="btn" id="saveSetup">Save setup</button>
+        <p class="hint" id="storeNote"></p>
+      </div>
+
+      <div class="card">
+        <h2>Back up your hours</h2>
+        <p class="hint">Your hours live on this phone. A backup saves your days, pay settings and payslips to a file you keep (save it to Files or iCloud Drive). Do this every few weeks. Restoring puts those days back; days in the file replace the same days here and all other days stay.</p>
+        <p class="hint" id="backupInfo"></p>
+        <button class="btn ghost" id="backupBtn">Save backup file</button>
+        <button class="btn ghost" id="backupMail">Email me a backup</button>
+        <label class="btn ghost" for="restoreFile">Restore from backup</label>
+        <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="inner" role="tablist">
+    <button class="tab" role="tab" data-view="day" aria-selected="true">Day</button>
+    <button class="tab" role="tab" data-view="week" aria-selected="false">Week</button>
+    <button class="tab" role="tab" data-view="month" aria-selected="false">Month</button>
+    <button class="tab" role="tab" data-view="pay" aria-selected="false">Pay</button>
+    <button class="tab" role="tab" data-view="setup" aria-selected="false">Setup</button>
+  </div>
+</nav>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="head"><h2 id="sheetTitle">Email timesheet</h2><button class="iconbtn" id="sheetClose" aria-label="Close" style="min-width:48px">&times;</button></div>
+    <div id="sheetEmpty" hidden>
+      <p>Add your email and the office addresses in Setup first.</p>
+      <button class="btn" id="goSetup">Go to Setup</button>
+    </div>
+    <div id="sheetBody" class="stack" style="gap:14px">
+      <div class="field"><span class="label">To</span><div class="sel" id="mTo"></div></div>
+      <div class="field"><span class="label">Subject</span><div class="sel" id="mSub"></div></div>
+      <div class="field"><span class="label">Message</span><div class="sel mailprev" id="mBody"></div></div>
+      <p class="hint" id="mAttach"></p>
+      <p class="hint" id="mSent"></p>
+      <button class="btn" id="sendBtn">Send now</button>
+      <button class="btn ghost" id="shareBtn">Share to Mail or Outlook</button>
+      <div class="status" id="sendStatus" aria-live="polite"></div>
+      <details class="more">
+        <summary>Other ways to send</summary>
+        <div class="stack" style="margin-top:10px">
+          <button class="btn ghost" id="dlBtn2">Download spreadsheet</button>
+          <a class="btn ghost" id="outlookLink" href="#" target="_blank" rel="noopener">Open a draft in Outlook</a>
+          <a class="btn ghost" id="mailLink" href="#">Open in phone's mail app</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<div class="viewer" id="viewer" hidden>
+  <div class="vbar">
+    <button class="btn ghost" id="vClose">Close</button>
+    <button class="btn" id="vSave">Save a copy</button>
+  </div>
+  <div class="vmsg" id="vMsg" hidden></div>
+  <div class="vbody" id="vBody"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var iso = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  var parseISO = function (s) { var p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+  var addDays = function (d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  var mondayOf = function (d) { var x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); x.setHours(0, 0, 0, 0); return x; };
+  var dayName = function (d) { return DAYS[(d.getDay() + 6) % 7]; };
+  var shortDate = function (d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+  var longDate = function (d) { return dayName(d) + ' ' + shortDate(d) + ' ' + d.getFullYear(); };
+  var toMin = function (t) { if (!t) return null; var p = t.split(':').map(Number); return p[0] * 60 + p[1]; };
+  var fmtHM = function (m) { return Math.floor(m / 60) + ':' + pad(m % 60); };
+  var dec2 = function (m) { return (m / 60).toFixed(2); };
+
+  function worked(e) {
+    if (e.type) return 0;
+    var s = toMin(e.start), f = toMin(e.end);
+    if (s == null || f == null) return 0;
+    var span = f - s;
+    if (span < 0) span += 1440;
+    return Math.max(0, span - (Number(e.brk) || 0));
+  }
+
+  var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2 };
+  var PAYFIX = { taxCode: '509L', pensionPct: 4, pensionQual: true, pensionPre: false, sickPay: 24.65, payModel: 2 };
+  var TYPES = { holiday: 'Holiday', bank: 'Bank holiday', sick: 'Sick' };
+  var isOpen = function (e) { return !!(e && !e.type && e.start && !e.end); };
+  var fixDate = '';
+  var entries = {};
+  var sends = {};
+  var payslips = {};
+  var formTouched = false;
+  var ctx = 'week';
+  var selDate = iso(new Date());
+  var weekStart = mondayOf(new Date());
+  var mode = 'local';
+  var formLoaded = false;
+
+  /* ---------- storage (on this phone) ---------- */
+  function lsGet(k, fallback) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  function initStore() {
+    entries = lsGet('hourslog:entries', {});
+    sends = lsGet('hourslog:sends', {});
+    payslips = lsGet('hourslog:payslips', {});
+    settings = Object.assign({}, settings, lsGet('hourslog:settings', {}));
+    mode = 'local';
+    onData();
+  }
+  function onData() {
+    if (!formLoaded) { formLoaded = true; loadForm(); fillSetup(); }
+    else { updateStatus(); updateClock(); }
+    updateFix();
+    renderWeek();
+    renderMonth();
+    renderPay();
+    $('#who').textContent = settings.name || '';
+    showSync();
+    $('#storeNote').textContent = 'Your hours are saved on this phone and work with no signal. Back them up in the section below every few weeks.';
+  }
+  function showSync() {
+    var el = $('#syncNote'); if (!el) return;
+    var n = Object.keys(entries).length;
+    var last = settings.lastBackup ? new Date(settings.lastBackup) : null;
+    var stale = !last || (Date.now() - last.getTime() > 30 * 864e5);
+    if (n > 0 && stale) { el.textContent = last ? 'Your last backup was over a month ago. Back up in Setup so your hours are safe.' : 'You have not backed up yet. Back up in Setup so your hours are safe.'; el.hidden = false; }
+    else { el.textContent = ''; el.hidden = true; }
+  }
+  async function putEntry(e) {
+    entries[e.date] = e;
+    if (!lsSet('hourslog:entries', entries)) throw new Error('storage');
+  }
+  async function removeEntry(date) {
+    delete entries[date];
+    lsSet('hourslog:entries', entries);
+  }
+  async function putSettings() {
+    if (!lsSet('hourslog:settings', settings)) throw new Error('storage');
+    showSync();
+  }
+
+  /* ---------- toast ---------- */
+  var toastTimer;
+  function toast(msg) {
+    var t = $('#toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+
+  /* ---------- tabs ---------- */
+  function setView(v) {
+    ['day', 'week', 'month', 'pay', 'setup'].forEach(function (n) { $('#view-' + n).hidden = n !== v; });
+    document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.view === v ? 'true' : 'false'); });
+    if (v === 'week') renderWeek();
+    if (v === 'month') renderMonth();
+    if (v === 'pay') renderPay();
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('.tab').forEach(function (b) { b.addEventListener('click', function () { setView(b.dataset.view); }); });
+
+  /* ---------- quarter-hour time pickers ---------- */
+  function buildTimes() {
+    document.querySelectorAll('.timesel').forEach(function (box) {
+      var id = box.dataset.for;
+      var what = (id === 'tStart' || id === 'sStart') ? 'Start' : 'Finish';
+      var h = document.createElement('select'), m = document.createElement('select');
+      h.setAttribute('aria-label', what + ' hour'); m.setAttribute('aria-label', what + ' minutes');
+      var blank = document.createElement('option'); blank.value = ''; blank.textContent = '--'; h.appendChild(blank);
+      for (var i = 0; i < 24; i++) { var o = document.createElement('option'); o.value = o.textContent = pad(i); h.appendChild(o); }
+      [0, 15, 30, 45].forEach(function (v) { var o = document.createElement('option'); o.value = o.textContent = pad(v); m.appendChild(o); });
+      var sep = document.createElement('span'); sep.className = 'colon'; sep.textContent = ':';
+      box.appendChild(h); box.appendChild(sep); box.appendChild(m);
+      function push() { var inp = document.getElementById(id); inp.value = h.value ? h.value + ':' + m.value : ''; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+      h.addEventListener('change', push); m.addEventListener('change', push);
+      box._set = function (v) {
+        if (!v) { h.value = ''; return; }
+        var p = v.split(':'); h.value = p[0];
+        var mm = Math.round(Number(p[1]) / 15) * 15; if (mm >= 60) mm = 45;
+        m.value = pad(mm);
+      };
+    });
+  }
+  function setT(id, v) {
+    document.getElementById(id).value = v;
+    var box = document.querySelector('.timesel[data-for="' + id + '"]');
+    if (box && box._set) box._set(v);
+  }
+
+  /* ---------- start / finish clock ---------- */
+  function nowQuarter() {
+    var d = new Date();
+    var mins = Math.round((d.getHours() * 60 + d.getMinutes()) / 15) * 15;
+    if (mins > 1425) mins = 1425;
+    return pad(Math.floor(mins / 60)) + ':' + pad(mins % 60);
+  }
+  function updateClock() {
+    var e = entries[iso(new Date())];
+    if (e && e.type) {
+      $('#btnStart').disabled = true; $('#btnFinish').disabled = true;
+      $('#clockMsg').textContent = 'Today is marked as ' + TYPES[e.type] + '.';
+      return;
+    }
+    var running = !!(e && e.start && !e.end), done = !!(e && e.start && e.end);
+    $('#btnStart').disabled = !!(e && e.start);
+    $('#btnFinish').disabled = !running;
+    $('#clockMsg').textContent = running ? 'Working since ' + e.start + '.'
+      : done ? 'Today: ' + e.start + '–' + e.end + ', ' + fmtHM(worked(e)) + ' worked.'
+      : 'Not started today.';
+  }
+  async function clockStart() {
+    var today = iso(new Date()), e = entries[today];
+    selDate = today;
+    if (e && e.type) { loadForm(); toast('Today is marked as ' + TYPES[e.type]); return; }
+    if (e && e.start) { loadForm(); return; }
+    var t = nowQuarter();
+    try {
+      await putEntry({ date: today, type: '', start: t, end: '', brk: Number(settings.defBrk) || 0, night: false, note: '' });
+      loadForm(); renderWeek();
+      toast('Started at ' + t);
+    } catch (err) { toast('Could not save. Try again.'); }
+  }
+  async function clockFinish() {
+    var today = iso(new Date()), e = entries[today];
+    selDate = today;
+    if (!e || e.type || !e.start || e.end) { loadForm(); return; }
+    var t = nowQuarter();
+    var next = { date: today, type: '', start: e.start, end: t, brk: Number(e.brk) || 0, night: !!e.night, note: e.note || '' };
+    next.mins = worked(next);
+    try {
+      await putEntry(next);
+      loadForm(); renderWeek();
+      toast('Finished at ' + t + ', ' + fmtHM(next.mins) + ' worked');
+    } catch (err) { toast('Could not save. Try again.'); }
+  }
+  $('#btnStart').addEventListener('click', clockStart);
+  $('#btnFinish').addEventListener('click', clockFinish);
+
+  /* ---------- day form ---------- */
+  function formEntry() {
+    var ty = $('#dtype').value;
+    if (ty) return { date: selDate, type: ty, start: '', end: '', brk: 0, night: false, note: $('#note').value.trim() };
+    return {
+      date: selDate,
+      type: '',
+      start: $('#tStart').value,
+      end: $('#tEnd').value,
+      brk: Number($('#brk').value) || 0,
+      night: $('#night').checked,
+      note: $('#note').value.trim()
+    };
+  }
+  function loadForm() {
+    formTouched = false;
+    $('#dayDate').value = selDate;
+    var dd = parseISO(selDate);
+    $('#dow').textContent = dd.toLocaleDateString('en-GB', { weekday: 'long' });
+    $('#dlong').textContent = dd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    $('#todayTag').hidden = selDate !== iso(new Date());
+    var e = entries[selDate];
+    setType(e && e.type ? e.type : '');
+    setT('tStart', e && e.start ? e.start : settings.defStart);
+    setT('tEnd', e ? (e.type ? settings.defEnd : e.end) : settings.defEnd);
+    $('#brk').value = e && !e.type ? e.brk : settings.defBrk;
+    $('#night').checked = e ? !!e.night : false;
+    $('#note').value = e ? (e.note || '') : '';
+    $('#delDay').hidden = !e;
+    updateReadout();
+    updateStatus();
+    updateClock();
+  }
+  function setType(t) {
+    $('#dtype').value = t || '';
+    document.querySelectorAll('#typeChips .chip').forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.t === (t || '') ? 'true' : 'false'); });
+    $('#workFields').hidden = !!t;
+    updateHol();
+  }
+  $('#typeChips').addEventListener('click', function (ev) {
+    var b = ev.target.closest('.chip'); if (!b) return;
+    setType(b.dataset.t); updateReadout(); updateStatus(); updateHol();
+  });
+  function updateReadout() {
+    var e = formEntry();
+    if (e.type) {
+      $('#total').textContent = TYPES[e.type];
+      $('#dec').textContent = 'no hours counted';
+      $('#scale').innerHTML = '';
+      return;
+    }
+    var m = worked(e);
+    $('#total').textContent = fmtHM(m);
+    $('#dec').textContent = dec2(m) + ' h';
+    var brk = Number($('#brk').value) || 0;
+    document.querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', Number(c.dataset.m) === brk ? 'true' : 'false'); });
+    var s = toMin(e.start), f = toMin(e.end);
+    var scale = $('#scale'); scale.innerHTML = '';
+    if (s == null || f == null) return;
+    var segs = f >= s ? [[s, f]] : [[s, 1440], [0, f]];
+    segs.forEach(function (g) {
+      var d = document.createElement('div'); d.className = 'seg';
+      d.style.left = (g[0] / 1440 * 100) + '%';
+      d.style.width = Math.max(0.6, (g[1] - g[0]) / 1440 * 100) + '%';
+      scale.appendChild(d);
+    });
+  }
+  function sameEntry(a, b) {
+    return a && b && (a.type || '') === (b.type || '') && a.start === b.start && a.end === b.end && Number(a.brk) === Number(b.brk) && !!a.night === !!b.night && (a.note || '') === (b.note || '');
+  }
+  function updateStatus() {
+    var saved = entries[selDate];
+    var st = $('#status');
+    if (saved && sameEntry(saved, formEntry())) { st.textContent = 'Saved for ' + longDate(parseISO(selDate)); st.className = 'status ok'; }
+    else if (saved) { st.textContent = 'Changes not saved yet'; st.className = 'status'; }
+    else { st.textContent = 'Not saved yet'; st.className = 'status'; }
+    $('#delDay').hidden = !saved;
+  }
+  ['#tStart', '#tEnd', '#brk', '#night', '#note'].forEach(function (s) {
+    $(s).addEventListener('input', function () { formTouched = true; updateReadout(); updateStatus(); });
+    $(s).addEventListener('change', function () { updateReadout(); updateStatus(); });
+  });
+  $('#chips').addEventListener('click', function (ev) {
+    var b = ev.target.closest('.chip'); if (!b) return;
+    $('#brk').value = b.dataset.m; updateReadout(); updateStatus();
+  });
+  $('#brk').addEventListener('change', function () {
+    this.value = Math.round((Number(this.value) || 0) / 15) * 15;
+    updateReadout(); updateStatus();
+  });
+  function gotoDate(s) { if (!s) return; selDate = s; loadForm(); }
+  $('#dayDate').addEventListener('change', function () { gotoDate($('#dayDate').value); });
+  $('#prevDay').addEventListener('click', function () { gotoDate(iso(addDays(parseISO(selDate), -1))); });
+  $('#nextDay').addEventListener('click', function () { gotoDate(iso(addDays(parseISO(selDate), 1))); });
+
+  $('#saveDay').addEventListener('click', async function () {
+    var e = formEntry();
+    if (!e.type && (!e.start || !e.end)) { toast('Enter a start and finish time'); return; }
+    e.mins = worked(e);
+    try {
+      await putEntry(e);
+      updateStatus(); renderWeek(); updateClock();
+      toast('Saved ' + dayName(parseISO(e.date)) + ' ' + (e.type ? TYPES[e.type] : fmtHM(e.mins)));
+      updateFix();
+    } catch (err) { toast('Could not save. Try again.'); }
+  });
+  $('#delDay').addEventListener('click', async function () {
+    try { await removeEntry(selDate); loadForm(); updateFix(); renderWeek(); toast('Day deleted'); }
+    catch (err) { toast('Could not delete. Try again.'); }
+  });
+
+  /* ---------- missing finish time ---------- */
+  function openDays() {
+    var t = iso(new Date());
+    return Object.keys(entries).filter(function (k) { return k < t && isOpen(entries[k]); }).sort();
+  }
+  function updateFix() {
+    var list = openDays(), card = $('#fixCard');
+    if (!list.length) { card.hidden = true; fixDate = ''; return; }
+    var k = list[0], e = entries[k];
+    card.hidden = false;
+    if (k !== fixDate) { fixDate = k; setT('fixEnd', settings.defEnd); }
+    $('#fixText').textContent = 'You started ' + longDate(parseISO(k)) + ' at ' + e.start + ' but there is no finish time. What time did you finish?' + (list.length > 1 ? ' (' + (list.length - 1) + ' more after this)' : '');
+  }
+  $('#fixSave').addEventListener('click', async function () {
+    var k = fixDate, e = entries[k], v = $('#fixEnd').value;
+    if (!e || !v) { toast('Pick the finish time'); return; }
+    var next = Object.assign({}, e, { type: '', end: v });
+    next.mins = worked(next);
+    try {
+      await putEntry(next);
+      fixDate = '';
+      updateFix(); loadForm(); renderWeek(); renderMonth();
+      toast('Saved ' + dayName(parseISO(k)) + ' ' + fmtHM(next.mins));
+    } catch (err) { toast('Could not save. Try again.'); }
+  });
+  $('#fixEdit').addEventListener('click', function () { if (fixDate) { selDate = fixDate; loadForm(); window.scrollTo(0, 0); } });
+
+  /* ---------- week ---------- */
+  function weekData() {
+    var rows = [], total = 0, days = 0, nights = 0, leave = 0;
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(weekStart, i), e = entries[iso(d)];
+      if (i >= 5 && !e) continue;
+      var m = e ? worked(e) : 0;
+      if (e && e.type) { if (i < 5) leave++; }
+      else if (e) { days++; total += m; if (e.night) nights++; }
+      rows.push({ d: d, e: e, m: m });
+    }
+    return { rows: rows, total: total, days: days, nights: nights, leave: leave };
+  }
+  function renderWeek() {
+    var w = weekData();
+    $('#weekLabel').textContent = shortDate(weekStart) + ' – ' + shortDate(addDays(weekStart, 4)) + ' ' + addDays(weekStart, 4).getFullYear();
+    $('#wTotal').textContent = fmtHM(w.total);
+    $('#wDec').textContent = dec2(w.total) + ' h';
+    $('#wDays').textContent = w.days;
+    $('#wNights').textContent = w.nights;
+    var tgt = Math.round((Number(settings.weekTarget) || 0) * 60);
+    if (tgt > 0) {
+      var exp = Math.round(tgt * (5 - Math.min(5, w.leave)) / 5), diff = w.total - exp;
+      $('#wTarget').textContent = 'Target ' + fmtHM(exp) + (w.leave ? ' (after ' + w.leave + (w.leave === 1 ? ' leave day' : ' leave days') + ')' : '') + ' · ' + (diff === 0 ? 'on target' : fmtHM(Math.abs(diff)) + (diff > 0 ? ' over' : ' under'));
+    } else $('#wTarget').textContent = '';
+    var openRows = w.rows.filter(function (r) { return isOpen(r.e); });
+    $('#wOpen').textContent = openRows.length ? openRows.map(function (r) { return dayName(r.d) + ' ' + r.d.getDate(); }).join(', ') + (openRows.length === 1 ? ' has' : ' have') + ' no finish time yet. Tap it to fix before sending.' : '';
+    var tb = $('#weekRows'); tb.innerHTML = '';
+    w.rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      if (!r.e) tr.className = 'empty';
+      var lv = r.e && r.e.type;
+      var cells = [
+        dayName(r.d) + ' ' + r.d.getDate(),
+        lv ? TYPES[r.e.type] : r.e ? r.e.start : '–',
+        lv ? '–' : r.e ? (r.e.end || '…') : '–',
+        lv ? '–' : r.e ? String(r.e.brk) : '–',
+        null,
+        lv ? '–' : r.e ? fmtHM(r.m) : '–'
+      ];
+      cells.forEach(function (txt, i) {
+        var td = document.createElement('td');
+        if (i === 5) td.className = 't';
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('aria-label', 'Edit ' + longDate(r.d));
+        if (i === 4) {
+          if (r.e && !r.e.type && r.e.night) { var p = document.createElement('span'); p.className = 'pill'; p.textContent = 'Night'; b.appendChild(p); }
+          else b.textContent = '–';
+        } else b.textContent = txt;
+        b.addEventListener('click', function () { selDate = iso(r.d); loadForm(); setView('day'); });
+        td.appendChild(b); tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+  }
+  $('#prevWeek').addEventListener('click', function () { weekStart = addDays(weekStart, -7); renderWeek(); });
+  $('#nextWeek').addEventListener('click', function () { weekStart = addDays(weekStart, 7); renderWeek(); });
+
+  /* ---------- month ---------- */
+  var monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  var picked = {};
+  function monthKey() { return monthStart.getFullYear() + '-' + pad(monthStart.getMonth() + 1); }
+  function monthLabelText() { return monthStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }); }
+  /* A week runs Monday to Friday and belongs to the month its Friday falls in. */
+  function weekGroup(mon) {
+    var fri = addDays(mon, 4);
+    var g = { n: Math.floor((fri.getDate() - 1) / 7) + 1, mon: iso(mon), from: mon, to: fri, fri: fri, days: [], total: 0, worked: 0, nights: 0, leave: 0, any: 0, hol: 0, sick: 0 };
+    for (var i = 0; i < 7; i++) {
+      var day = addDays(mon, i), e = entries[iso(day)];
+      if (!e) continue;
+      var m = worked(e);
+      g.days.push({ d: day, e: e, m: m });
+      g.any++;
+      if (e.type) { g.leave++; if (i < 5) { if (e.type === 'sick') g.sick++; else g.hol++; } if (i >= 5) g.to = day; continue; }
+      g.total += m; g.worked++;
+      if (e.night) g.nights++;
+      if (i >= 5) g.to = day;
+    }
+    return g;
+  }
+  function monthGroups() { return groupsFor(monthStart); }
+  function groupsFor(ms) {
+    var y = ms.getFullYear(), mo = ms.getMonth();
+    var first = new Date(y, mo, 1);
+    var toFri = (5 - first.getDay() + 7) % 7;
+    var mon = addDays(first, toFri - 4);
+    var groups = [];
+    while (addDays(mon, 4).getMonth() === mo) {
+      groups.push(weekGroup(mon));
+      mon = addDays(mon, 7);
+    }
+    return groups;
+  }
+  /* Every ticked week, from any month, in date order. */
+  function ticked() {
+    return Object.keys(picked).filter(function (k) { return picked[k]; }).sort().map(function (k) { return weekGroup(parseISO(k)); }).filter(function (g) { return g.any > 0; });
+  }
+  function monthName(d) { return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }); }
+  function isSent(g) {
+    return Object.keys(sends).some(function (k) { var r = sends[k]; return r && ((r.weeks && r.weeks.indexOf(g.mon) > -1) || r.week === g.mon); });
+  }
+  function periodMonths() {
+    var gs = ticked();
+    if (!gs.length) return [monthStart, monthStart];
+    var a = gs[0].fri, b = gs[gs.length - 1].fri;
+    return [new Date(a.getFullYear(), a.getMonth(), 1), new Date(b.getFullYear(), b.getMonth(), 1)];
+  }
+  function periodLabel() {
+    var p = periodMonths();
+    if (p[0].getTime() === p[1].getTime()) return monthName(p[0]);
+    if (p[0].getFullYear() === p[1].getFullYear()) return p[0].toLocaleDateString('en-GB', { month: 'long' }) + ' – ' + monthName(p[1]);
+    return monthName(p[0]) + ' – ' + monthName(p[1]);
+  }
+  function periodKey() {
+    var p = periodMonths();
+    var k = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1); };
+    return k(p[0]) === k(p[1]) ? k(p[0]) : k(p[0]) + '_to_' + k(p[1]);
+  }
+  function renderMonth() {
+    $('#monthLabel').textContent = monthLabelText();
+    var groups = monthGroups(), box = $('#monthWeeks');
+    box.innerHTML = '';
+    var any = 0, allOn = true;
+    groups.forEach(function (g) {
+      var has = g.any > 0, on = has && !!picked[g.mon];
+      if (has) { any++; if (!on) allOn = false; }
+      var row = document.createElement('label');
+      row.className = 'wk' + (has ? '' : ' off');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = on; cb.disabled = !has;
+      cb.addEventListener('change', function () { if (cb.checked) picked[g.mon] = true; else delete picked[g.mon]; renderMonth(); });
+      var mid = document.createElement('div');
+      var t1 = document.createElement('div');
+      t1.textContent = 'Week ' + g.n + '  ·  ' + shortDate(g.from) + ' – ' + shortDate(g.to);
+      var t2 = document.createElement('div');
+      t2.className = 's';
+      t2.textContent = has ? g.worked + (g.worked === 1 ? ' day' : ' days') + (g.leave ? ', ' + g.leave + ' leave' : '') + (g.nights ? ', ' + g.nights + (g.nights === 1 ? ' night' : ' nights') + ' away' : '') : 'Nothing logged';
+      if (has && isSent(g)) t2.textContent += ' · sent before';
+      mid.appendChild(t1); mid.appendChild(t2);
+      var tot = document.createElement('div');
+      tot.className = 't'; tot.textContent = has ? fmtHM(g.total) : '–';
+      row.appendChild(cb); row.appendChild(mid); row.appendChild(tot);
+      box.appendChild(row);
+    });
+    var sel = { total: 0, days: 0, nights: 0 }, byMonth = {}, order = [];
+    ticked().forEach(function (g) {
+      sel.total += g.total; sel.days += g.worked; sel.nights += g.nights;
+      var mk = monthName(g.fri);
+      if (!byMonth[mk]) { byMonth[mk] = 0; order.push(mk); }
+      byMonth[mk]++;
+    });
+    $('#mTotal').textContent = fmtHM(sel.total);
+    $('#mDec').textContent = dec2(sel.total) + ' h';
+    $('#mDays').textContent = sel.days;
+    $('#mNights').textContent = sel.nights;
+    $('#pickList').textContent = order.length
+      ? 'Ticked: ' + order.map(function (m) { return m + ' (' + byMonth[m] + (byMonth[m] === 1 ? ' week)' : ' weeks)'); }).join(', ')
+      : 'Nothing ticked yet. Tick weeks in any month and they all go out together.';
+    $('#mAll').textContent = any && allOn ? 'Untick this month' : 'Tick whole month';
+    $('#mAll').disabled = !any;
+    $('#monthSend').disabled = order.length === 0;
+    $('#monthHint').textContent = 'Weeks run Monday to Friday and belong to the month their Friday falls in, so a week from 28 Sep to 2 Oct counts as October. One email and one spreadsheet go out, in date order. Your ticks stay when you move to another month.';
+  }
+  $('#prevMonth').addEventListener('click', function () { monthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1); renderMonth(); });
+  $('#nextMonth').addEventListener('click', function () { monthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1); renderMonth(); });
+  $('#mAll').addEventListener('click', function () {
+    var gs = monthGroups().filter(function (g) { return g.any > 0; });
+    var allOn = gs.length > 0 && gs.every(function (g) { return !!picked[g.mon]; });
+    gs.forEach(function (g) { if (allOn) delete picked[g.mon]; else picked[g.mon] = true; });
+    renderMonth();
+  });
+  $('#monthSend').addEventListener('click', function () { openEmail('month'); });
+  function monthBody() {
+    var gs = ticked();
+    var seen = {};
+    gs.forEach(function (g) { seen[monthName(g.fri)] = 1; });
+    var multi = Object.keys(seen).length > 1;
+    var lines = ['Timesheet for ' + (settings.name || 'me') + ', ' + periodLabel(), ''];
+    var total = 0, days = 0, nights = 0, cur = null, mTotal = 0;
+    function closeMonth() {
+      if (multi && cur !== null) lines.push(cur + ' total: ' + fmtHM(mTotal) + ' (' + dec2(mTotal) + ' h)', '');
+      mTotal = 0;
+    }
+    gs.forEach(function (g) {
+      var mk = monthName(g.fri);
+      if (mk !== cur) { closeMonth(); cur = mk; if (multi) lines.push(mk.toUpperCase(), ''); }
+      lines.push('Week ' + g.n + ' (commencing ' + longDate(parseISO(g.mon)) + ')');
+      g.days.forEach(function (r) {
+        if (r.e.type) { lines.push('  ' + dayName(r.d) + ' ' + shortDate(r.d) + '   ' + TYPES[r.e.type].toUpperCase() + (r.e.note ? '   (' + r.e.note + ')' : '')); return; }
+        var l = '  ' + dayName(r.d) + ' ' + shortDate(r.d) + '   ' + r.e.start + '–' + r.e.end + '   break ' + r.e.brk + 'm   ' + fmtHM(r.m) + (r.e.night ? '   NIGHT AWAY' : '');
+        if (r.e.note) l += '   (' + r.e.note + ')';
+        lines.push(l);
+      });
+      lines.push('  Week total: ' + fmtHM(g.total), '');
+      total += g.total; mTotal += g.total; days += g.worked; nights += g.nights;
+    });
+    closeMonth();
+    lines.push((multi ? 'Grand total: ' : 'Month total: ') + fmtHM(total) + ' (' + dec2(total) + ' h)', 'Days worked: ' + days, 'Nights away: ' + nights);
+    if (settings.name) lines.push('', settings.name);
+    return lines.join('\n');
+  }
+  function buildMonthWorkbook() {
+    var gs = ticked();
+    var seen = {};
+    gs.forEach(function (g) { seen[monthName(g.fri)] = 1; });
+    var multi = Object.keys(seen).length > 1;
+    var aoa = [['Timesheet'], ['Name', settings.name || ''], ['Period', periodLabel()], [],
+      ['Day', 'Date', 'Start', 'Finish', 'Break (min)', 'Night away', 'Worked (h:mm)', 'Worked (hours)', 'Site / job']];
+    var total = 0, nights = 0, cur = null, mTotal = 0, mNights = 0;
+    function closeMonth() {
+      if (multi && cur !== null) aoa.push([cur + ' subtotal', '', '', '', '', mNights + ' night(s)', fmtHM(mTotal), Number(dec2(mTotal)), '']);
+      mTotal = 0; mNights = 0;
+    }
+    gs.forEach(function (g) {
+      var mk = monthName(g.fri);
+      if (mk !== cur) { closeMonth(); cur = mk; }
+      g.days.forEach(function (r) {
+        if (r.e.type) { aoa.push([dayName(r.d), iso(r.d), TYPES[r.e.type], '', '', '', '', '', r.e.note || '']); return; }
+        aoa.push([dayName(r.d), iso(r.d), r.e.start, r.e.end, r.e.brk, r.e.night ? 'Yes' : 'No', fmtHM(r.m), Number(dec2(r.m)), r.e.note || '']);
+      });
+      aoa.push(['Week total', 'Week ' + g.n + ' (w/c ' + g.mon + ')', '', '', '', g.nights + ' night(s)', fmtHM(g.total), Number(dec2(g.total)), '']);
+      total += g.total; nights += g.nights; mTotal += g.total; mNights += g.nights;
+    });
+    closeMonth();
+    var lastRow = aoa.length;
+    aoa.push([multi ? 'Grand total' : 'Month total', '', '', '', '', nights + ' night(s)', fmtHM(total), Number(dec2(total)), '']);
+    return { aoa: aoa, cols: [11, 16, 8, 8, 12, 12, 14, 15, 28], formula: { cell: 'H' + (lastRow + 1), f: 'SUMIF(A6:A' + lastRow + ',"Week total",H6:H' + lastRow + ')', v: Number(dec2(total)) } };
+  }
+
+  /* ---------- holiday counter ---------- */
+  function leaveYear() {
+    var now = new Date(), sm = Math.min(12, Math.max(1, Number(settings.holStart) || 1)) - 1;
+    var y = now.getMonth() >= sm ? now.getFullYear() : now.getFullYear() - 1;
+    return { from: new Date(y, sm, 1), to: new Date(y + 1, sm, 1) };
+  }
+  function holidayUsed() {
+    var ly = leaveYear(), a = iso(ly.from), b = iso(ly.to), n = 0;
+    Object.keys(entries).forEach(function (k) { if (k >= a && k < b && entries[k].type === 'holiday') n++; });
+    return n;
+  }
+  function holText() {
+    var used = holidayUsed(), allow = Number(settings.holDays) || 0;
+    return allow > 0 ? { big: used + ' of ' + allow + ' days used', small: Math.max(0, allow - used) + (allow - used === 1 ? ' day left' : ' days left') + (used > allow ? ' (over by ' + (used - allow) + ')' : '') }
+      : { big: used + (used === 1 ? ' day' : ' days') + ' used', small: 'Add your yearly allowance in Setup to see days left' };
+  }
+  function updateHol() {
+    var h = $('#holHint');
+    if (!h) return;
+    if ($('#dtype').value === 'holiday') { var t = holText(); h.textContent = t.big + ' this leave year. ' + t.small + '.'; h.hidden = false; }
+    else h.hidden = true;
+  }
+
+  /* ---------- pay ---------- */
+  var payStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  var gbp = function (n) { return '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var round2 = function (n) { return Math.round(n * 100) / 100; };
+  function weekPayMins(g) {
+    var day = Math.round((Number(settings.payCap) || 40) * 60 / 5), m = g.total;
+    if (settings.paidHol) m += g.hol * day;
+    return m;
+  }
+  function monthPayWeeks(ms) {
+    var gs = groupsFor(ms), cap = Math.round((Number(settings.payCap) || 0) * 60);
+    return gs.map(function (g, i) {
+      var tot = weekPayMins(g), last = i === gs.length - 1;
+      var paid = last && cap > 0 ? Math.min(tot, cap) : tot;
+      return { g: g, tot: tot, paid: paid, out: last && cap > 0 ? Math.max(0, tot - cap) : 0, last: last };
+    });
+  }
+  function payKeyFor(ms) { return ms.getFullYear() + '-' + pad(ms.getMonth() + 1); }
+  function computePay(ms) {
+    var weeks = monthPayWeeks(ms);
+    var prev = monthPayWeeks(new Date(ms.getFullYear(), ms.getMonth() - 1, 1));
+    var carryIn = prev.length ? prev[prev.length - 1].out : 0;
+    var mins = carryIn, carryOut = 0, sickDays = 0;
+    weeks.forEach(function (w) { mins += w.paid; carryOut += w.out; sickDays += w.g.sick; });
+    var rec = payslips[payKeyFor(ms)] || {};
+    var bonus = round2(Number(rec.bonus) || 0), other = round2(Number(rec.deduct) || 0);
+    var rate = Number(settings.payRate) || 0;
+    var hoursPay = round2(mins / 60 * rate);
+    var sickPay = round2(sickDays * (Number(settings.sickPay) || 0));
+    var gross = round2(hoursPay + sickPay + bonus);
+    var pbase = settings.pensionQual ? Math.max(0, Math.min(gross, 4189) - 520) : gross;
+    var pension = round2(pbase * (Number(settings.pensionPct) || 0) / 100);
+    var taxable = settings.pensionPre ? gross - pension : gross;
+    var m = /^(\d{1,4})L$/i.exec((settings.taxCode || '').trim()), badCode = !m;
+    var free = m ? (Number(m[1]) * 10 + 9) / 12 : 0;
+    var x = Math.max(0, taxable - free), basic = 37700 / 12;
+    var tax = Math.floor((0.2 * Math.min(x, basic) + 0.4 * Math.max(0, x - basic)) * 100) / 100;
+    var ni = Math.floor((0.08 * Math.max(0, Math.min(gross, 4189) - 1048) + 0.02 * Math.max(0, gross - 4189)) * 100) / 100;
+    return { weeks: weeks, carryIn: carryIn, carryOut: carryOut, mins: mins, rate: rate, hoursPay: hoursPay, sickDays: sickDays, sickPay: sickPay, bonus: bonus, other: other, gross: gross, pension: pension, tax: tax, ni: ni, net: round2(gross - pension - tax - ni - other), badCode: badCode, prevName: new Date(ms.getFullYear(), ms.getMonth() - 1, 1).toLocaleDateString('en-GB', { month: 'long' }) };
+  }
+  function lineEl(label, val, cls, sub) {
+    var d = document.createElement('div'); d.className = 'line' + (cls ? ' ' + cls : '');
+    var l = document.createElement('div'); l.textContent = label;
+    if (sub) { var s2 = document.createElement('div'); s2.className = 'sub'; s2.textContent = sub; l.appendChild(s2); }
+    var v = document.createElement('div'); v.className = 'v'; v.textContent = val;
+    d.appendChild(l); d.appendChild(v); return d;
+  }
+  function renderPay() {
+    if (!$('#payLabel')) return;
+    $('#payLabel').textContent = payStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    var c = computePay(payStart);
+    $('#pNet').textContent = gbp(c.net);
+    $('#pHours').textContent = fmtHM(c.mins) + ' paid hours at ' + gbp(c.rate) + ' an hour';
+    var box = $('#pLines'); box.innerHTML = '';
+    box.appendChild(lineEl('Hours', gbp(c.hoursPay), '', fmtHM(c.mins) + ' at ' + gbp(c.rate)));
+    if (c.sickPay > 0) box.appendChild(lineEl('Sick pay', gbp(c.sickPay), '', c.sickDays + (c.sickDays === 1 ? ' day' : ' days')));
+    if (c.bonus > 0) box.appendChild(lineEl('Bonus / extra pay', gbp(c.bonus)));
+    box.appendChild(lineEl('Gross pay', gbp(c.gross), 'total'));
+    box.appendChild(lineEl('Tax', '-' + gbp(c.tax), 'neg', settings.taxCode ? 'Code ' + settings.taxCode.toUpperCase() : ''));
+    box.appendChild(lineEl('National Insurance', '-' + gbp(c.ni), 'neg'));
+    box.appendChild(lineEl('Pension', '-' + gbp(c.pension), 'neg', (Number(settings.pensionPct) || 0) + '%' + (settings.pensionQual ? ' of pay above £520' : ' of pay')));
+    if (c.other > 0) box.appendChild(lineEl('Other deductions', '-' + gbp(c.other), 'neg'));
+    box.appendChild(lineEl('Take-home', gbp(c.net), 'total'));
+    $('#pWarn').textContent = c.badCode ? 'Your tax code is not in the form 509L, so no tax-free allowance was applied. Fix it in Setup.' : '';
+    var wb = $('#pWeeks'); wb.innerHTML = '';
+    if (c.carryIn > 0) wb.appendChild(lineEl('Carried in from ' + c.prevName, fmtHM(c.carryIn), '', 'Extra hours from last week of ' + c.prevName));
+    c.weeks.forEach(function (w) {
+      var sub = w.g.any ? (w.g.worked + (w.g.worked === 1 ? ' day' : ' days') + (w.g.leave ? ', ' + w.g.leave + ' leave' : '')) : 'Nothing logged';
+      if (w.out > 0) sub += ' · ' + fmtHM(w.out) + ' carried to next month';
+      if (w.last && !w.out) sub += ' · last week of the month';
+      wb.appendChild(lineEl('Week ' + w.g.n + ' · ' + shortDate(w.g.from) + ' – ' + shortDate(w.g.to), fmtHM(w.paid), '', sub));
+    });
+    if (c.carryOut > 0) wb.appendChild(lineEl('Carried to next month', fmtHM(c.carryOut), 'neg'));
+    renderSlip(c.net);
+    var h = holText(), ly = leaveYear();
+    $('#holBig').textContent = h.big;
+    $('#holYear').textContent = h.small + '. Leave year ' + shortDate(ly.from) + ' ' + ly.from.getFullYear() + ' to ' + shortDate(addDays(ly.to, -1)) + ' ' + addDays(ly.to, -1).getFullYear() + '.';
+  }
+  function payKey() { return payStart.getFullYear() + '-' + pad(payStart.getMonth() + 1); }
+  var hasStore = !!window.indexedDB;
+  function idb() {
+    return new Promise(function (res, rej) {
+      var r = indexedDB.open('hourslog', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('files'); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function idbRun(mode, fn) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction('files', mode), out;
+        out = fn(tx.objectStore('files'));
+        tx.oncomplete = function () { res(out && out.result); };
+        tx.onerror = function () { rej(tx.error); };
+        tx.onabort = function () { rej(tx.error); };
+      });
+    });
+  }
+  var idbPut = function (k, v) { return idbRun('readwrite', function (st) { return st.put(v, k); }); };
+  var idbGet = function (k) { return idbRun('readonly', function (st) { return st.get(k); }); };
+  var idbDel = function (k) { return idbRun('readwrite', function (st) { return st.delete(k); }); };
+  var blobUrls = {};
+  async function slipUrl(rec) {
+    if (blobUrls[rec.assetId]) return blobUrls[rec.assetId];
+    var b = await idbGet(rec.assetId);
+    if (!b) return '';
+    blobUrls[rec.assetId] = URL.createObjectURL(b);
+    return blobUrls[rec.assetId];
+  }
+  async function putSlip(key, patch) {
+    var rec = Object.assign({}, payslips[key] || {}, patch, { payslip: key });
+    payslips[key] = rec;
+    if (!lsSet('hourslog:payslips', payslips)) throw new Error('storage');
+  }
+  function renderSlip(est) {
+    var key = payKey(), rec = payslips[key] || {};
+    var body = $('#slipBody'); body.innerHTML = '';
+    if (rec.assetId) {
+      if (/^image\//.test(rec.contentType || '')) {
+        var im = document.createElement('img'); im.alt = 'Payslip'; im.style.cssText = 'max-width:100%;max-height:260px;border:1px solid var(--line);border-radius:8px;align-self:flex-start;cursor:pointer';
+        slipUrl(rec).then(function (u) { if (u) im.src = u; }).catch(function () {});
+        im.addEventListener('click', function () { openViewer(rec); });
+        body.appendChild(im);
+      }
+      var row = document.createElement('div'); row.className = 'stack'; row.style.marginTop = '8px';
+      var a = document.createElement('button'); a.type = 'button'; a.className = 'btn ghost'; a.textContent = 'Open payslip';
+      a.addEventListener('click', function () { openViewer(rec); });
+      row.appendChild(a);
+      var rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn plain'; rm.textContent = 'Remove payslip';
+      rm.addEventListener('click', function () {
+        if (rm.dataset.sure !== '1') { rm.dataset.sure = '1'; rm.textContent = 'Tap again to remove for good'; return; }
+        removeSlip(key);
+      });
+      row.appendChild(rm);
+      body.appendChild(row);
+      var meta = document.createElement('p'); meta.className = 'hint'; meta.textContent = (rec.fileName || 'Payslip') + (rec.uploadedAt ? ' · added ' + new Date(rec.uploadedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+      body.appendChild(meta);
+    } else {
+      var none = document.createElement('p'); none.className = 'hint'; none.textContent = 'No payslip saved for this month.'; body.appendChild(none);
+    }
+    $('#slipLbl').textContent = rec.assetId ? 'Replace payslip' : 'Add payslip';
+    $('#slipLbl').hidden = !hasStore;
+    $('#slipMsg').textContent = hasStore ? '' : 'Saving payslip files is not available on this browser. You can still enter your take-home below.';
+    [['#exBonus', rec.bonus], ['#exDeduct', rec.deduct]].forEach(function (x) { var el = $(x[0]); if (document.activeElement !== el) el.value = x[1] != null && x[1] !== '' && Number(x[1]) !== 0 ? x[1] : ''; });
+    var inp = $('#actNet');
+    if (document.activeElement !== inp) inp.value = rec.actualNet != null && rec.actualNet !== '' ? rec.actualNet : '';
+    var act = rec.actualNet;
+    if (act != null && act !== '') {
+      var d = round2(Number(act) - est);
+      $('#actDiff').textContent = 'Estimate ' + gbp(est) + ' · Actual ' + gbp(Number(act)) + ' · ' + (d === 0 ? 'spot on' : gbp(Math.abs(d)) + (d > 0 ? ' more than estimated' : ' less than estimated'));
+    } else $('#actDiff').textContent = '';
+  }
+  var viewing = null;
+  async function openViewer(rec) {
+    var url = '';
+    try { url = await slipUrl(rec); } catch (e) {}
+    if (!url) { toast('That payslip file could not be found'); return; }
+    viewing = { rec: rec, url: url };
+    var body = $('#vBody'); body.innerHTML = '';
+    $('#vMsg').hidden = true;
+    if (/^image\//.test(rec.contentType || '')) {
+      var im = document.createElement('img'); im.src = url; im.alt = 'Payslip'; body.appendChild(im);
+    } else {
+      var fr = document.createElement('iframe'); fr.src = url; fr.title = 'Payslip'; body.appendChild(fr);
+      $('#vMsg').textContent = 'If the payslip does not show, use Save a copy.'; $('#vMsg').hidden = false;
+    }
+    $('#viewer').hidden = false;
+  }
+  $('#vClose').addEventListener('click', function () { $('#viewer').hidden = true; $('#vBody').innerHTML = ''; viewing = null; });
+  $('#vSave').addEventListener('click', async function () {
+    if (!viewing) return;
+    var rec = viewing.rec, ct = rec.contentType || '';
+    var ext = ct === 'application/pdf' ? 'pdf' : ct === 'image/png' ? 'png' : ct === 'image/webp' ? 'webp' : ct === 'image/gif' ? 'gif' : 'jpg';
+    try {
+      var blob = await idbGet(rec.assetId);
+      if (!blob) throw new Error('missing');
+      await saveFile('Payslip-' + payKey() + '.' + ext, blob);
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      toast('Could not save a copy here');
+    }
+  });
+  async function removeSlip(key) {
+    var rec = payslips[key]; if (!rec || !rec.assetId) return;
+    try {
+      await putSlip(key, { assetId: '', fileName: '', contentType: '', uploadedAt: '' });
+      try { await idbDel(rec.assetId); delete blobUrls[rec.assetId]; } catch (e) {}
+      renderPay(); toast('Payslip removed');
+    } catch (err) { toast('Could not remove it. Try again.'); }
+  }
+  $('#slipFile').addEventListener('change', async function (ev) {
+    var file = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (!file || !hasStore) return;
+    var key = payKey();
+    var type = file.type || (/\.pdf$/i.test(file.name) ? 'application/pdf' : '');
+    if (!/^(application\/pdf|image\/(png|jpeg|webp|gif))$/.test(type)) { toast('Use a PDF or a JPEG or PNG photo'); return; }
+    $('#slipMsg').textContent = 'Saving…';
+    try {
+      var id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      await idbPut(id, new Blob([file], { type: type }));
+      var old = (payslips[key] || {}).assetId;
+      await putSlip(key, { assetId: id, fileName: String(file.name || 'Payslip').slice(0, 80), contentType: type, uploadedAt: new Date().toISOString() });
+      if (old && old !== id) { try { await idbDel(old); delete blobUrls[old]; } catch (e) {} }
+      $('#slipMsg').textContent = '';
+      renderPay(); toast('Payslip saved');
+    } catch (err) {
+      $('#slipMsg').textContent = 'Could not save it. Your phone may be out of space.';
+    }
+  });
+  $('#saveExtras').addEventListener('click', async function () {
+    var b = $('#exBonus').value, d = $('#exDeduct').value;
+    try {
+      await putSlip(payKey(), { bonus: b === '' ? 0 : round2(Math.max(0, Number(b) || 0)), deduct: d === '' ? 0 : round2(Math.max(0, Number(d) || 0)) });
+      renderPay(); toast('Extras saved');
+    } catch (err) { toast('Could not save. Try again.'); }
+  });
+  $('#saveAct').addEventListener('click', async function () {
+    var v = $('#actNet').value;
+    try {
+      await putSlip(payKey(), { actualNet: v === '' ? '' : round2(Number(v)) });
+      renderPay(); toast('Take-home saved');
+    } catch (err) { toast('Could not save. Try again.'); }
+  });
+  $('#prevPay').addEventListener('click', function () { payStart = new Date(payStart.getFullYear(), payStart.getMonth() - 1, 1); renderPay(); });
+  $('#nextPay').addEventListener('click', function () { payStart = new Date(payStart.getFullYear(), payStart.getMonth() + 1, 1); renderPay(); });
+
+  /* ---------- backup and restore ---------- */
+  function showBackup() {
+    $('#backupInfo').textContent = settings.lastBackup
+      ? 'Last backup: ' + new Date(settings.lastBackup).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + '. Days logged now: ' + Object.keys(entries).length + '.'
+      : 'No backup yet. Days logged now: ' + Object.keys(entries).length + '.';
+  }
+  function bytesToB64(u8) {
+    var out = '', CH = 0x8000;
+    for (var i = 0; i < u8.length; i += CH) out += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+    return btoa(out);
+  }
+  function blobToB64(blob) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(String(fr.result).split(',')[1] || ''); };
+      fr.onerror = function () { rej(fr.error); };
+      fr.readAsDataURL(blob);
+    });
+  }
+  function b64ToBlob(b64, type) {
+    var bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: type });
+  }
+  async function buildBackup() {
+    var files = {};
+    var keys = Object.keys(payslips);
+    for (var i = 0; i < keys.length; i++) {
+      var rec = payslips[keys[i]];
+      if (rec && rec.assetId) {
+        try { var b = await idbGet(rec.assetId); if (b) files[rec.assetId] = { type: b.type || rec.contentType, b64: await blobToB64(b) }; } catch (e) {}
+      }
+    }
+    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files };
+  }
+  async function markBackedUp() {
+    settings.lastBackup = new Date().toISOString();
+    await putSettings();
+    showBackup(); showSync();
+  }
+  $('#backupBtn').addEventListener('click', async function () {
+    try {
+      var data = await buildBackup();
+      await saveFile('Hours-Log-backup-' + iso(new Date()) + '.json', new Blob([JSON.stringify(data)], { type: 'application/json' }));
+      await markBackedUp();
+      toast('Backup saved');
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      toast('Could not save the backup');
+    }
+  });
+  $('#backupMail').addEventListener('click', async function () {
+    var btn = this, to = (settings.me || '').trim();
+    if (to.indexOf('@') < 1) { toast('Add your email in Setup first'); return; }
+    btn.disabled = true;
+    try {
+      var data = await buildBackup();
+      var bytes = new TextEncoder().encode(JSON.stringify(data));
+      await gmailSend({ to: [to], subject: 'Hours Log backup ' + iso(new Date()), text: 'Your Hours Log backup is attached. Keep this email safe. To restore, open Setup in the app and choose Restore from backup.', html: '', attach: { filename: 'Hours-Log-backup-' + iso(new Date()) + '.json', type: 'application/json', bytes: bytes } });
+      await markBackedUp();
+      toast('Backup emailed to you');
+    } catch (err) { toast(gErrMsg(err)); }
+    finally { btn.disabled = false; }
+  });
+  $('#restoreFile').addEventListener('change', async function (ev) {
+    var file = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (!file) return;
+    try {
+      var data = JSON.parse(await file.text());
+      if (!data || data.app !== 'hours-log' || !data.entries || typeof data.entries !== 'object') { toast('That is not an Hours Log backup'); return; }
+      var okTime = function (t) { return t === '' || /^\d{2}:\d{2}$/.test(t); };
+      var n = 0;
+      var keys = Object.keys(data.entries).sort();
+      for (var i = 0; i < keys.length; i++) {
+        var r = data.entries[keys[i]];
+        if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(r.date || '') || !okTime(r.start || '') || !okTime(r.end || '')) continue;
+        var e = { date: r.date, type: TYPES[r.type] ? r.type : '', start: r.start || '', end: r.end || '', brk: Number(r.brk) || 0, night: !!r.night, note: String(r.note || '').slice(0, 120) };
+        e.mins = worked(e);
+        await putEntry(e);
+        n++;
+      }
+      if (!settings.name && !settings.office && data.settings && typeof data.settings === 'object') {
+        settings = Object.assign({}, settings, data.settings, { lastBackup: settings.lastBackup || '' });
+        await putSettings(); fillSetup();
+      }
+      if (data.payslips && typeof data.payslips === 'object') {
+        var pk = Object.keys(data.payslips);
+        for (var j = 0; j < pk.length; j++) {
+          var pr = data.payslips[pk[j]];
+          if (!/^\d{4}-\d{2}$/.test(pk[j]) || !pr || typeof pr !== 'object') continue;
+          var rec = { payslip: pk[j], actualNet: pr.actualNet == null ? '' : pr.actualNet, bonus: Number(pr.bonus) || 0, deduct: Number(pr.deduct) || 0 };
+          var f = pr.assetId && data.payslipFiles && data.payslipFiles[pr.assetId];
+          if (f && f.b64 && hasStore) {
+            try {
+              var nid = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+              await idbPut(nid, b64ToBlob(f.b64, f.type || pr.contentType));
+              rec.assetId = nid; rec.fileName = String(pr.fileName || '').slice(0, 80); rec.contentType = f.type || pr.contentType; rec.uploadedAt = pr.uploadedAt || '';
+            } catch (e) {}
+          }
+          payslips[pk[j]] = rec;
+        }
+        lsSet('hourslog:payslips', payslips);
+      }
+      loadForm(); renderWeek(); renderMonth(); renderPay(); showBackup(); showSync();
+      toast('Restored ' + n + (n === 1 ? ' day' : ' days'));
+    } catch (err) { toast('Could not read that file'); }
+  });
+
+  /* ---------- setup ---------- */
+  function fillSetup() {
+    $('#sName').value = settings.name || '';
+    $('#sMe').value = settings.me || '';
+    $('#sOffice').value = settings.office || '';
+    setT('sStart', settings.defStart);
+    setT('sEnd', settings.defEnd);
+    showBackup();
+    $('#sBrk').value = settings.defBrk;
+    $('#sTarget').value = settings.weekTarget === '' || settings.weekTarget == null ? '' : settings.weekTarget;
+    $('#sRate').value = settings.payRate;
+    $('#sPension').value = settings.pensionPct;
+    $('#sTax').value = settings.taxCode || '';
+    $('#sCap').value = Number(settings.payCap) > 0 ? settings.payCap : '';
+    $('#sPaidHol').checked = !!settings.paidHol;
+    $('#sSick').value = Number(settings.sickPay) > 0 ? settings.sickPay : '';
+    $('#sPenQual').checked = !!settings.pensionQual;
+    $('#sPenPre').checked = !!settings.pensionPre;
+    $('#sHolDays').value = Number(settings.holDays) > 0 ? settings.holDays : '';
+    $('#sHolStart').value = String(Number(settings.holStart) || 1);
+    $('#sClient').value = settings.gClientId || '';
+  }
+  $('#saveSetup').addEventListener('click', async function () {
+    settings = {
+      name: $('#sName').value.trim(),
+      me: $('#sMe').value.trim(),
+      office: $('#sOffice').value.trim(),
+      defStart: $('#sStart').value || '08:00',
+      defEnd: $('#sEnd').value || '16:30',
+      defBrk: Number($('#sBrk').value) || 0,
+      weekTarget: $('#sTarget').value === '' ? 0 : Math.max(0, Math.min(80, Number($('#sTarget').value) || 0)),
+      payRate: Math.max(0, Number($('#sRate').value) || 0),
+      pensionPct: Math.max(0, Math.min(100, Number($('#sPension').value) || 0)),
+      taxCode: $('#sTax').value.trim().toUpperCase(),
+      payCap: $('#sCap').value === '' ? 0 : Math.max(0, Math.min(80, Number($('#sCap').value) || 0)),
+      paidHol: $('#sPaidHol').checked,
+      sickPay: Math.max(0, Number($('#sSick').value) || 0),
+      pensionQual: $('#sPenQual').checked,
+      pensionPre: $('#sPenPre').checked,
+      payModel: 2,
+      gClientId: $('#sClient').value.trim(),
+      holDays: Math.max(0, Number($('#sHolDays').value) || 0),
+      holStart: Number($('#sHolStart').value) || 1,
+      lastBackup: settings.lastBackup || ''
+    };
+    try {
+      await putSettings();
+      $('#who').textContent = settings.name;
+      if (!entries[selDate]) loadForm();
+      renderWeek(); renderPay(); updateHol();
+      toast('Setup saved');
+    } catch (err) { toast('Could not save. Try again.'); }
+  });
+
+  /* ---------- email and spreadsheet ---------- */
+  function recipients() {
+    var all = [settings.me].concat((settings.office || '').split(/[\s,;]+/));
+    var seen = {}, out = [];
+    all.forEach(function (a) { a = (a || '').trim(); if (a.indexOf('@') > 0 && !seen[a.toLowerCase()]) { seen[a.toLowerCase()] = 1; out.push(a); } });
+    return out;
+  }
+  function subject() {
+    if (ctx === 'month') return 'Timesheet – ' + (settings.name || 'Monthly hours') + ' – ' + periodLabel();
+    return 'Timesheet – ' + (settings.name || 'Weekly hours') + ' – week commencing ' + longDate(weekStart);
+  }
+  function bodyText() {
+    if (ctx === 'month') return monthBody();
+    var w = weekData();
+    var lines = ['Timesheet for ' + (settings.name || 'me') + ', week commencing ' + longDate(weekStart), ''];
+    w.rows.forEach(function (r) {
+      var label = dayName(r.d) + ' ' + shortDate(r.d);
+      if (!r.e) { lines.push(label + '   –'); return; }
+      if (r.e.type) { lines.push(label + '   ' + TYPES[r.e.type].toUpperCase() + (r.e.note ? '   (' + r.e.note + ')' : '')); return; }
+      var l = label + '   ' + r.e.start + '–' + r.e.end + '   break ' + r.e.brk + 'm   ' + fmtHM(r.m) + (r.e.night ? '   NIGHT AWAY' : '');
+      if (r.e.note) l += '   (' + r.e.note + ')';
+      lines.push(l);
+    });
+    lines.push('', 'Total: ' + fmtHM(w.total) + ' (' + dec2(w.total) + ' h)', 'Days worked: ' + w.days, 'Nights away: ' + w.nights);
+    if (settings.name) lines.push('', settings.name);
+    return lines.join('\n');
+  }
+  function openEmail(kind) {
+    ctx = kind === 'month' ? 'month' : 'week';
+    $('#sheetTitle').textContent = ctx === 'month' ? 'Send ticked weeks' : 'Email timesheet';
+    var to = recipients();
+    $('#sheetEmpty').hidden = to.length > 0;
+    $('#sheetBody').hidden = to.length === 0;
+    if (to.length) {
+      $('#mTo').textContent = to.join(', ');
+      $('#mSub').textContent = subject();
+      $('#mBody').innerHTML = emailHtml();
+      $('#mAttach').textContent = 'Spreadsheet attached: ' + fname();
+      var prev = ctx === 'month' ? null : sends[iso(weekStart)];
+      var dupe = ctx === 'month' ? ticked().filter(isSent).length : 0;
+      $('#mSent').textContent = prev ? 'Already sent ' + new Date(prev.sentAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' to ' + (prev.to ? prev.to.length : 0) + ' address(es).' : (dupe ? dupe + (dupe === 1 ? ' of these weeks was' : ' of these weeks were') + ' sent before.' : '');
+      $('#sendBtn').textContent = (prev || dupe) ? 'Send again' : 'Send now';
+      $('#sendStatus').textContent = ''; $('#sendStatus').className = 'status';
+      $('#mailLink').href = 'mailto:' + to.map(encodeURIComponent).join(',') + '?subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(bodyText()).replace(/%0A/g, '%0D%0A');
+      $('#outlookLink').href = 'https://outlook.office.com/mail/deeplink/compose?to=' + encodeURIComponent(to.join(',')) + '&subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(bodyText()).replace(/%0A/g, '%0D%0A');
+    }
+    $('#sheet').hidden = false;
+    if ((settings.gClientId || '').trim()) loadGIS().catch(function () {});
+  }
+  function closeEmail() { $('#sheet').hidden = true; }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function hm(m) { return Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm'; }
+  function emailHtml() {
+    var groups;
+    if (ctx === 'month') {
+      groups = ticked().map(function (g) { return { title: 'Week ' + g.n + ' · commencing ' + longDate(parseISO(g.mon)), month: monthName(g.fri), days: g.days, total: g.total, nights: g.nights, worked: g.worked, leave: g.leave }; });
+    } else {
+      var w = weekData();
+      groups = [{ title: '', month: '', days: w.rows.filter(function (r) { return r.e; }), total: w.total, nights: w.nights, worked: w.days, leave: w.leave }];
+    }
+    var seen = {};
+    groups.forEach(function (g) { if (g.month) seen[g.month] = 1; });
+    var multi = Object.keys(seen).length > 1;
+    var th = 'text-align:left;padding:8px 10px;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#566676;background:#eef1f4;border-bottom:1px solid #d3dae1;';
+    var td = 'padding:8px 10px;border-bottom:1px solid #e3e8ed;font-size:14px;vertical-align:top;';
+    var tf = 'padding:8px 10px;background:#f6f8fa;';
+    var out = ['<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1b2733;max-width:680px;line-height:1.4">'];
+    out.push('<h2 style="margin:0 0 4px;font-size:22px">Timesheet</h2>');
+    out.push('<p style="margin:0 0 18px;color:#566676;font-size:14px">' + esc(settings.name || '') + (settings.name ? ' · ' : '') + esc(ctx === 'month' ? periodLabel() : 'Week commencing ' + longDate(weekStart)) + '</p>');
+    var cur = null, total = 0, days = 0, nights = 0, mTotal = 0, leaveN = 0;
+    function monthClose() {
+      if (multi && cur !== null) out.push('<p style="margin:4px 0 22px;text-align:right;font-weight:600">' + esc(cur) + ' total: ' + hm(mTotal) + '</p>');
+      mTotal = 0;
+    }
+    groups.forEach(function (g) {
+      if (multi && g.month !== cur) {
+        monthClose(); cur = g.month;
+        out.push('<h3 style="margin:18px 0 8px;font-size:16px;border-bottom:2px solid #0a6c8b;padding-bottom:4px">' + esc(g.month) + '</h3>');
+      }
+      if (g.title) out.push('<p style="margin:12px 0 6px;font-weight:600;font-size:14px">' + esc(g.title) + '</p>');
+      out.push('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 6px">');
+      out.push('<tr><th style="' + th + '">Day</th><th style="' + th + '">Start</th><th style="' + th + '">Finish</th><th style="' + th + '">Break</th><th style="' + th + '">Worked</th><th style="' + th + '">Notes</th></tr>');
+      g.days.forEach(function (r) {
+        if (r.e.type) {
+          out.push('<tr><td style="' + td + 'white-space:nowrap">' + esc(dayName(r.d) + ' ' + shortDate(r.d)) + '</td>'
+            + '<td colspan="3" style="' + td + 'color:#566676">' + esc(TYPES[r.e.type]) + '</td>'
+            + '<td style="' + td + '">–</td><td style="' + td + '">' + esc(r.e.note || '') + '</td></tr>');
+          return;
+        }
+        var notes = (r.e.night ? '<span style="background:#fbebcb;color:#7a4f00;padding:1px 7px;border-radius:9px;font-size:12px;font-weight:600">Night away</span> ' : '') + esc(r.e.note || '');
+        out.push('<tr><td style="' + td + 'white-space:nowrap">' + esc(dayName(r.d) + ' ' + shortDate(r.d)) + '</td>'
+          + '<td style="' + td + '">' + esc(r.e.start) + '</td><td style="' + td + '">' + esc(r.e.end) + '</td>'
+          + '<td style="' + td + 'white-space:nowrap">' + esc(r.e.brk) + ' min</td>'
+          + '<td style="' + td + 'font-weight:600;white-space:nowrap">' + hm(r.m) + '</td>'
+          + '<td style="' + td + '">' + notes + '</td></tr>');
+      });
+      out.push('<tr><td colspan="4" style="' + tf + 'font-weight:600">' + (ctx === 'month' ? 'Week total' : 'Total') + '</td>'
+        + '<td style="' + tf + 'font-weight:700;white-space:nowrap">' + hm(g.total) + '</td>'
+        + '<td style="' + tf + 'color:#566676;font-size:13px">' + (g.nights ? g.nights + (g.nights === 1 ? ' night away' : ' nights away') : '') + '</td></tr>');
+      out.push('</table>');
+      total += g.total; mTotal += g.total; days += g.worked; nights += g.nights; leaveN += g.leave || 0;
+    });
+    monthClose();
+    function stat(label, val) { return '<td style="padding:10px 22px 10px 0"><div style="font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#566676">' + label + '</div><div style="font-size:18px;font-weight:700">' + val + '</div></td>'; }
+    out.push('<table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 0;border-collapse:collapse"><tr>'
+      + stat(multi ? 'Grand total' : 'Total hours', hm(total) + ' (' + dec2(total) + ' h)') + stat('Days worked', days) + stat('Nights away', nights) + (leaveN ? stat('Leave days', leaveN) : '') + '</tr></table>');
+    if (settings.name) out.push('<p style="margin:22px 0 0">Kind regards,<br>' + esc(settings.name) + '</p>');
+    out.push('</div>');
+    return out.join('');
+  }
+  function fname() { return 'Timesheet_' + (settings.name || 'hours').replace(/[^A-Za-z0-9_-]+/g, '_') + '_' + (ctx === 'month' ? periodKey() : iso(weekStart)) + '.xlsx'; }
+  function sendMsg(text, ok) { var s = $('#sendStatus'); s.textContent = text; s.className = ok ? 'status ok' : 'status'; }
+  async function recordSent(to) {
+    var wk = ctx === 'month' ? ticked().map(function (g) { return g.mon; }) : [];
+    var rec = ctx === 'month'
+      ? { month: wk[0] + '_' + wk[wk.length - 1], weeks: wk, sentAt: new Date().toISOString(), to: to }
+      : { week: iso(weekStart), sentAt: new Date().toISOString(), to: to };
+    var key = rec.month || rec.week;
+    sends[key] = rec;
+    lsSet('hourslog:sends', sends);
+    renderMonth();
+    $('#mSent').textContent = 'Sent just now to ' + to.length + ' address(es).';
+    $('#sendBtn').textContent = 'Send again';
+  }
+  var XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  var gTok = '', gExp = 0, gisPromise = null;
+  function loadGIS() {
+    if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+    if (gisPromise) return gisPromise;
+    gisPromise = new Promise(function (res, rej) {
+      var sc = document.createElement('script');
+      sc.src = 'https://accounts.google.com/gsi/client';
+      sc.async = true;
+      sc.onload = function () { res(); };
+      sc.onerror = function () { gisPromise = null; rej(new Error('offline')); };
+      document.head.appendChild(sc);
+    });
+    return gisPromise;
+  }
+  async function gToken() {
+    if (gTok && Date.now() < gExp) return gTok;
+    var cid = (settings.gClientId || '').trim();
+    if (!cid) throw { code: 'noclient' };
+    try { await loadGIS(); } catch (e) { throw { code: 'offline' }; }
+    return new Promise(function (resolve, reject) {
+      var tc = google.accounts.oauth2.initTokenClient({
+        client_id: cid,
+        scope: 'https://www.googleapis.com/auth/gmail.send',
+        callback: function (r) {
+          if (r && r.access_token) { gTok = r.access_token; gExp = Date.now() + ((Number(r.expires_in) || 3600) - 120) * 1000; resolve(gTok); }
+          else reject({ code: 'auth', message: (r && (r.error_description || r.error)) || '' });
+        },
+        error_callback: function (e) { reject({ code: 'auth', message: (e && e.type) || '' }); }
+      });
+      tc.requestAccessToken({});
+    });
+  }
+  function wrap76(b) { return b.replace(/.{1,76}/g, '$&\r\n'); }
+  function strB64(str) { return bytesToB64(new TextEncoder().encode(str)); }
+  function encWord(str) {
+    if (/^[\x20-\x7e]*$/.test(str)) return str;
+    var chars = Array.from(str), parts = [];
+    for (var i = 0; i < chars.length; i += 15) parts.push('=?UTF-8?B?' + strB64(chars.slice(i, i + 15).join('')) + '?=');
+    return parts.join('\r\n ');
+  }
+  function buildMime(o) {
+    var mix = 'mix_' + Math.random().toString(36).slice(2), alt = 'alt_' + Math.random().toString(36).slice(2);
+    var L = [];
+    L.push('To: ' + o.to.join(', '));
+    L.push('Subject: ' + encWord(o.subject));
+    L.push('MIME-Version: 1.0');
+    L.push('Content-Type: multipart/mixed; boundary="' + mix + '"');
+    L.push('', '--' + mix);
+    if (o.html) {
+      L.push('Content-Type: multipart/alternative; boundary="' + alt + '"', '');
+      L.push('--' + alt, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '');
+      L.push(wrap76(strB64(o.text)).replace(/\r\n$/, ''));
+      L.push('--' + alt, 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '');
+      L.push(wrap76(strB64(o.html)).replace(/\r\n$/, ''));
+      L.push('--' + alt + '--');
+    } else {
+      L.push('Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '');
+      L.push(wrap76(strB64(o.text)).replace(/\r\n$/, ''));
+    }
+    if (o.attach) {
+      var fn = o.attach.filename.replace(/[^A-Za-z0-9._-]+/g, '_');
+      L.push('--' + mix, 'Content-Type: ' + o.attach.type + '; name="' + fn + '"', 'Content-Disposition: attachment; filename="' + fn + '"', 'Content-Transfer-Encoding: base64', '');
+      L.push(wrap76(bytesToB64(o.attach.bytes)).replace(/\r\n$/, ''));
+    }
+    L.push('--' + mix + '--', '');
+    return L.join('\r\n');
+  }
+  async function gmailSend(o) {
+    var tok = await gToken();
+    var raw = btoa(buildMime(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    var r;
+    try {
+      r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify({ raw: raw }) });
+    } catch (e) { throw { code: 'offline' }; }
+    if (r.status === 401) { gTok = ''; throw { code: 'auth', message: 'Sign-in expired' }; }
+    if (!r.ok) {
+      var j = {}; try { j = await r.json(); } catch (e) {}
+      throw { code: 'api', status: r.status, message: (j.error && j.error.message) || '' };
+    }
+  }
+  function gErrMsg(err) {
+    var c = err && err.code;
+    if (c === 'noclient') return 'Add your Google sign-in code in Setup first, or use Share to Mail or Outlook.';
+    if (c === 'offline') return 'No signal. Try again when you are online, or use Share to Mail or Outlook.';
+    if (c === 'auth') return 'Google sign-in did not finish' + (err.message ? ' (' + err.message + ')' : '') + '. Try again, or use Share to Mail or Outlook.';
+    if (c === 'api') return 'Gmail refused it' + (err.status ? ' (' + err.status + ')' : '') + (err.message ? ': ' + err.message : '') + '. Check the Gmail API is switched on in your Google project.';
+    return 'Could not send. Use Share to Mail or Outlook instead.';
+  }
+  async function sendNow() {
+    var to = recipients();
+    if (!to.length) { sendMsg('Add your email in Setup first.', false); return; }
+    var open = ctx === 'month'
+      ? ticked().some(function (g) { return g.days.some(function (r) { return isOpen(r.e); }); })
+      : weekData().rows.some(function (r) { return isOpen(r.e); });
+    if (open) { sendMsg('A day has a start but no finish. Press Finish work or enter the finish time first.', false); return; }
+    var btn = $('#sendBtn');
+    btn.disabled = true; sendMsg('Signing in to Google…', false);
+    try {
+      var tok = await gToken();
+      sendMsg('Sending…', false);
+      await gmailSend({ to: to, subject: subject(), text: bodyText(), html: emailHtml(), attach: { filename: fname(), type: XLSX_MIME, bytes: makeXlsx(buildWorkbook()) } });
+      await recordSent(to);
+      sendMsg('Sent to ' + to.length + ' address(es). Check your Gmail Sent folder to see it.', true);
+      toast('Timesheet sent');
+    } catch (err) { sendMsg(gErrMsg(err), false); }
+    finally { btn.disabled = false; }
+  }
+  async function shareNow() {
+    try {
+      var f = new File([makeXlsx(buildWorkbook())], fname(), { type: XLSX_MIME });
+      var to = recipients();
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        await navigator.share({ files: [f], title: subject(), text: bodyText() });
+        sendMsg('Pick Mail or Outlook in the share sheet, then add the recipients and send. Add them once: ' + to.join(', '), true);
+      } else { await saveFile(fname(), f); sendMsg('Your phone cannot share from here, so the file was saved instead.', false); }
+    } catch (err) { if (!(err && err.name === 'AbortError')) sendMsg('Could not open the share sheet.', false); }
+  }
+  $('#shareBtn').addEventListener('click', shareNow);
+  $('#sendBtn').addEventListener('click', sendNow);
+  $('#emailBtn').addEventListener('click', function () { openEmail('week'); });
+  $('#sheetClose').addEventListener('click', closeEmail);
+  $('#sheet').addEventListener('click', function (ev) { if (ev.target === $('#sheet')) closeEmail(); });
+  $('#goSetup').addEventListener('click', function () { closeEmail(); setView('setup'); });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeEmail(); });
+  document.querySelectorAll('[data-copy]').forEach(function (b) {
+    b.addEventListener('click', async function () {
+      var el = document.getElementById(b.dataset.copy);
+      try { await navigator.clipboard.writeText(el.textContent); toast('Copied'); }
+      catch (e) {
+        var r = document.createRange(); r.selectNodeContents(el);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        toast('Selected. Press and hold to copy.');
+      }
+    });
+  });
+
+  function buildWorkbook() {
+    if (ctx === 'month') return buildMonthWorkbook();
+    var w = weekData();
+    var aoa = [
+      ['Weekly timesheet'],
+      ['Name', settings.name || ''],
+      ['Week commencing', longDate(weekStart)],
+      [],
+      ['Day', 'Date', 'Start', 'Finish', 'Break (min)', 'Night away', 'Worked (h:mm)', 'Worked (hours)', 'Site / job']
+    ];
+    w.rows.forEach(function (r) {
+      if (r.e && r.e.type) { aoa.push([dayName(r.d), iso(r.d), TYPES[r.e.type], '', '', '', '', '', r.e.note || '']); return; }
+      aoa.push([
+        dayName(r.d), iso(r.d),
+        r.e ? r.e.start : '', r.e ? r.e.end : '',
+        r.e ? r.e.brk : '', r.e ? (r.e.night ? 'Yes' : 'No') : '',
+        r.e ? fmtHM(r.m) : '', r.e ? Number(dec2(r.m)) : '',
+        r.e ? (r.e.note || '') : ''
+      ]);
+    });
+    aoa.push(['Total', '', '', '', '', w.nights + ' night(s)', fmtHM(w.total), Number(dec2(w.total)), '']);
+    var lastDay = 5 + w.rows.length;
+    return { aoa: aoa, cols: [8, 12, 8, 8, 12, 12, 14, 15, 28], formula: { cell: 'H' + (lastDay + 1), f: 'SUM(H6:H' + lastDay + ')', v: Number(dec2(w.total)) } };
+  }
+  async function download() {
+    try {
+      await saveFile(fname(), new Blob([makeXlsx(buildWorkbook())], { type: XLSX_MIME }));
+      toast('Spreadsheet ready');
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      toast('Could not save the file');
+    }
+  }
+  $('#dlBtn').addEventListener('click', download);
+  $('#dlBtn2').addEventListener('click', download);
+
+  /* ---------- spreadsheet writer (no libraries, works offline) ---------- */
+  var crcTable = (function () { var t = [], c, n, k; for (n = 0; n < 256; n++) { c = n; for (k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(u8) { var c = 0xFFFFFFFF; for (var i = 0; i < u8.length; i++) c = crcTable[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], central = [], offset = 0;
+    function u16(v) { return [v & 255, (v >> 8) & 255]; }
+    function u32(v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+      var head = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+      parts.push(new Uint8Array(head), name, data);
+      central.push({ name: name, crc: crc, size: data.length, offset: offset });
+      offset += head.length + name.length + data.length;
+    });
+    var cdStart = offset;
+    central.forEach(function (c) {
+      var h = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(c.crc), u32(c.size), u32(c.size), u16(c.name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.offset));
+      parts.push(new Uint8Array(h), c.name);
+      offset += h.length + c.name.length;
+    });
+    var end = [].concat(u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length), u32(offset - cdStart), u32(cdStart), u16(0));
+    parts.push(new Uint8Array(end));
+    var total = 0; parts.forEach(function (p) { total += p.length; });
+    var out = new Uint8Array(total), pos = 0;
+    parts.forEach(function (p) { out.set(p, pos); pos += p.length; });
+    return out;
+  }
+  function colName(i) { var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+  function xe(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ''); }
+  function makeXlsx(spec) {
+    var rowsXml = [];
+    spec.aoa.forEach(function (row, r) {
+      var first = String(row[0] == null ? '' : row[0]);
+      var bold = r === 0 || r === 4 || /^(Week total|Total|Grand total|Month total)$/.test(first) || / subtotal$/.test(first);
+      var cells = [];
+      row.forEach(function (v, c) {
+        if (v === '' || v == null) return;
+        var ref = colName(c) + (r + 1), num = typeof v === 'number';
+        var st = num && c === 7 ? (bold ? 3 : 2) : (bold ? 1 : 0);
+        if (spec.formula && spec.formula.cell === ref) cells.push('<c r="' + ref + '" s="' + st + '"><f>' + xe(spec.formula.f) + '</f><v>' + spec.formula.v + '</v></c>');
+        else if (num) cells.push('<c r="' + ref + '" s="' + st + '"><v>' + v + '</v></c>');
+        else cells.push('<c r="' + ref + '" s="' + st + '" t="inlineStr"><is><t xml:space="preserve">' + xe(v) + '</t></is></c>');
+      });
+      if (cells.length) rowsXml.push('<row r="' + (r + 1) + '">' + cells.join('') + '</row>');
+    });
+    var cols = spec.cols.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('');
+    var NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    var REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    var head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    return zipStore([
+      { name: '[Content_Types].xml', data: head + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+      { name: '_rels/.rels', data: head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: 'xl/workbook.xml', data: head + '<workbook xmlns="' + NS + '" xmlns:r="' + REL + '"><sheets><sheet name="Timesheet" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+      { name: 'xl/_rels/workbook.xml.rels', data: head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + REL + '/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="' + REL + '/styles" Target="styles.xml"/></Relationships>' },
+      { name: 'xl/styles.xml', data: head + '<styleSheet xmlns="' + NS + '"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="2" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
+      { name: 'xl/worksheets/sheet1.xml', data: head + '<worksheet xmlns="' + NS + '"><cols>' + cols + '</cols><sheetData>' + rowsXml.join('') + '</sheetData></worksheet>' }
+    ]);
+  }
+  async function saveFile(name, blob) {
+    var f = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: name }); return; }
+    var u = URL.createObjectURL(f), a = document.createElement('a');
+    a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
+  }
+
+  /* ---------- start ---------- */
+  (function () { var sel = $('#sHolStart'); MONTHS.forEach(function (m, i) { var o = document.createElement('option'); o.value = String(i + 1); o.textContent = new Date(2026, i, 1).toLocaleDateString('en-GB', { month: 'long' }); sel.appendChild(o); }); })();
+  buildTimes(); initStore();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+})();
+</script>
+</body>
+</html>
