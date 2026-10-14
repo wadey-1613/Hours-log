@@ -423,6 +423,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <button class="iconbtn" id="nextDay" aria-label="Next day">&rsaquo;</button>
       </div>
 
+      <p class="hint warnline" id="estNote" hidden></p>
       <div class="card">
         <div class="field">
           <span class="label">Type of day</span>
@@ -684,6 +685,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <div class="field"><label class="label" for="sTarget">Hours per week</label><input type="number" id="sTarget" inputmode="decimal" min="0" max="80" step="0.25"><p class="hint">The Week page shows how far over or under you are. Holiday, bank holiday and sick days reduce the target by one day each. Leave blank to switch it off.</p></div>
       </div>
       <div class="card">
+        <h2>Last week of the month</h2>
+        <label class="switch"><span class="txt"><b>Fill in 40 hours automatically</b><span class="hint">When the last week of a month starts, any empty weekdays are filled in as 8-hour days (40 hours) so the week can be sent and paid early. They are marked as estimates until you enter the real times</span></span><input type="checkbox" id="sAutoFill"><span class="track" aria-hidden="true"></span></label>
+      </div>
+      <div class="card">
         <h2>Sending</h2>
         <label class="switch"><span class="txt"><b>Check before sending</b><span class="hint">Shows a quick check of the week (missing days, very long or short days, hours against target) before the timesheet goes out</span></span><input type="checkbox" id="sCheck"><span class="track" aria-hidden="true"></span></label>
       </div>
@@ -856,6 +861,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     schedule = lsGet('hourslog:schedule', {});
     phones = lsGet('hourslog:phones', {});
     settings = Object.assign({}, settings, lsGet('hourslog:settings', {}));
+    ensureEstimates();
     mode = 'local';
     onData();
   }
@@ -887,6 +893,25 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     setView('setup');
     var c = $('#backupCard'); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth' });
     toast('Save a backup file or email one to yourself');
+  }
+  var realEntry = function (k) { var x = entries[k]; return x && !x.est ? x : null; };
+  function lastWeekMonday(d) {
+    var mon = mondayOf(d), fri = addDays(mon, 4);
+    return addDays(fri, 7).getMonth() !== fri.getMonth() ? mon : null;
+  }
+  /* The last week of the month is paid early, so empty weekdays start as 8 hour estimates (once per week). */
+  function ensureEstimates() {
+    if (settings.autoFill === false) return;
+    var mon = lastWeekMonday(new Date()); if (!mon) return;
+    var key = iso(mon), done = lsGet('hourslog:estFilled', {});
+    if (done[key]) return;
+    var start = settings.defStart || '08:00', brk = Number(settings.defBrk) || 0, em = ((toMin(start) + 480 + brk) % 1440), end = pad(Math.floor(em / 60)) + ':' + pad(em % 60), changed = false;
+    for (var i = 0; i < 5; i++) {
+      var k = iso(addDays(mon, i));
+      if (!entries[k]) { entries[k] = { date: k, type: '', start: start, end: end, brk: brk, night: false, note: '', mins: 480, est: true }; changed = true; }
+    }
+    if (changed) lsSet('hourslog:entries', entries);
+    done[key] = true; lsSet('hourslog:estFilled', done);
   }
   async function putEntry(e) {
     entries[e.date] = e;
@@ -975,7 +1000,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     return pad(Math.floor(mins / 60)) + ':' + pad(mins % 60);
   }
   function updateClock() {
-    var e = entries[iso(new Date())];
+    var e = realEntry(iso(new Date()));
     if (e && e.type) {
       $('#btnStart').disabled = true; $('#btnFinish').disabled = true;
       $('#clockMsg').textContent = 'Today is marked as ' + TYPES[e.type] + '.';
@@ -990,7 +1015,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     renderDue();
   }
   async function clockStart() {
-    var today = iso(new Date()), e = entries[today];
+    var today = iso(new Date()), e = realEntry(today);
     selDate = today;
     if (e && e.type) { loadForm(); toast('Today is marked as ' + TYPES[e.type]); return; }
     if (e && e.start) { loadForm(); return; }
@@ -1090,7 +1115,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function updateStatus() {
     var saved = entries[selDate];
     var st = $('#status');
-    if (saved && sameEntry(saved, formEntry())) { st.textContent = 'Saved for ' + longDate(parseISO(selDate)); st.className = 'status ok'; }
+    var en = $('#estNote');
+    if (en) { en.hidden = !(saved && saved.est); en.textContent = saved && saved.est ? 'This day is an estimate (' + fmtHM(worked(saved)) + ') because it is in the last week of the month. Enter the real times and press Save day to replace it.' : ''; }
+    if (saved && saved.est && sameEntry(saved, formEntry())) { st.textContent = 'Estimate, not confirmed yet'; st.className = 'status'; }
+    else if (saved && sameEntry(saved, formEntry())) { st.textContent = 'Saved for ' + longDate(parseISO(selDate)); st.className = 'status ok'; }
     else if (saved) { st.textContent = 'Changes not saved yet'; st.className = 'status'; }
     else { st.textContent = 'Not saved yet'; st.className = 'status'; }
     $('#delDay').hidden = !saved;
@@ -1182,14 +1210,15 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       $('#wTarget').textContent = 'Target ' + fmtHM(exp) + (w.leave ? ' (after ' + w.leave + (w.leave === 1 ? ' leave day' : ' leave days') + ')' : '') + ' · ' + (diff === 0 ? 'on target' : fmtHM(Math.abs(diff)) + (diff > 0 ? ' over' : ' under'));
     } else $('#wTarget').textContent = '';
     var openRows = w.rows.filter(function (r) { return isOpen(r.e); });
-    $('#wOpen').textContent = openRows.length ? openRows.map(function (r) { return dayName(r.d) + ' ' + r.d.getDate(); }).join(', ') + (openRows.length === 1 ? ' has' : ' have') + ' no finish time yet. Tap it to fix before sending.' : '';
+    var estRows = w.rows.filter(function (r) { return r.e && r.e.est; });
+    $('#wOpen').textContent = estRows.length && !openRows.length ? estRows.length + (estRows.length === 1 ? ' day is' : ' days are') + ' an estimate (shown as est). Tap one to enter the real times.' : openRows.length ? openRows.map(function (r) { return dayName(r.d) + ' ' + r.d.getDate(); }).join(', ') + (openRows.length === 1 ? ' has' : ' have') + ' no finish time yet. Tap it to fix before sending.' : '';
     var tb = $('#weekRows'); tb.innerHTML = '';
     w.rows.forEach(function (r) {
       var tr = document.createElement('tr');
       if (!r.e) tr.className = 'empty';
       var lv = r.e && r.e.type;
       var cells = [
-        dayName(r.d) + ' ' + r.d.getDate(),
+        dayName(r.d) + ' ' + r.d.getDate() + (r.e && r.e.est ? ' (est)' : ''),
         lv ? TYPES[r.e.type] : r.e ? r.e.start : '–',
         lv ? '–' : r.e ? (r.e.end || '…') : '–',
         lv ? '–' : r.e ? String(r.e.brk) : '–',
@@ -1325,6 +1354,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function loggedText(d) {
     var e = entries[d];
     if (!e) return null;
+    if (e.est) return null;
     if (e.type) return TYPES[e.type];
     return e.end ? e.start + '–' + e.end : 'Started ' + e.start;
   }
@@ -1461,8 +1491,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function renderDue() {
     var card = $('#dueCard'); if (!card) return;
     var today = iso(new Date()), todayStops = stopsOn(today), missed = [];
-    for (var i = 1; i <= 14; i++) { var k = iso(addDays(new Date(), -i)); if (stopsOn(k).length && !entries[k]) missed.push(k); }
-    var needToday = todayStops.length && !entries[today];
+    for (var i = 1; i <= 14; i++) { var k = iso(addDays(new Date(), -i)); if (stopsOn(k).length && !realEntry(k)) missed.push(k); }
+    var needToday = todayStops.length && !realEntry(today);
     var tabEl = document.querySelector('.tab[data-view="sched"]');
     if (!needToday && !missed.length) { card.hidden = true; if (tabEl) tabEl.classList.remove('dot'); return; }
     card.hidden = false;
@@ -2146,7 +2176,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function goTimesheet(k) { selDate = k; loadForm(); setView('day'); }
   function renderHome() {
     if (!$('#view-home')) return;
-    var now = new Date(), today = iso(now), st = stopsOn(today), e = entries[today], token = ++homeToken;
+    var now = new Date(), today = iso(now), st = stopsOn(today), e = realEntry(today), token = ++homeToken;
     $('#hDate').textContent = longDate(now);
     var main = $('#hMain'), act = $('#hActions'); main.innerHTML = ''; act.innerHTML = '';
     function btn(label, cls, fn) { var b = mk('button', 'btn' + (cls ? ' ' + cls : ''), label); b.type = 'button'; b.addEventListener('click', fn); act.appendChild(b); return b; }
@@ -2193,11 +2223,13 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     });
     for (var i = 1; i <= 14; i++) {
       var k = iso(addDays(now, -i));
-      if (stopsOn(k).length && !entries[k]) (function (kk) { todo.push({ t: longDate(parseISO(kk)) + ' was scheduled but has no hours logged', go: function () { goTimesheet(kk); } }); })(k);
+      if (stopsOn(k).length && !realEntry(k)) (function (kk) { todo.push({ t: longDate(parseISO(kk)) + ' was scheduled but has no hours logged', go: function () { goTimesheet(kk); } }); })(k);
     }
     var prev = addDays(mon, -7), prevWorked = false;
     for (var j = 0; j < 5; j++) { var pe = entries[iso(addDays(prev, j))]; if (pe && !pe.type) prevWorked = true; }
     if (prevWorked && !isSent({ mon: iso(prev) })) todo.push({ t: "Last week's timesheet (week of " + shortDate(prev) + ") has not been sent", go: function () { weekStart = prev; setView('week'); } });
+    var estDays = Object.keys(entries).filter(function (k) { return entries[k].est; }).sort();
+    if (estDays.length) todo.push({ t: estDays.length + (estDays.length === 1 ? ' day is' : ' days are') + ' estimated at 8:00 (last week of the month). Enter the real times when you have them.', go: function () { goTimesheet(estDays[0]); } });
     if (!todo.length) box.appendChild(mk('p', 'hint', 'All caught up. Nothing needs doing.'));
     todo.slice(0, 6).forEach(function (x) { box.appendChild(lineEl(x.t, '›', '', '', x.go)); });
 
@@ -2288,6 +2320,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         var r = data.entries[keys[i]];
         if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(r.date || '') || !okTime(r.start || '') || !okTime(r.end || '')) continue;
         var e = { date: r.date, type: TYPES[r.type] ? r.type : '', start: r.start || '', end: r.end || '', brk: Number(r.brk) || 0, night: !!r.night, note: String(r.note || '').slice(0, 120) };
+        if (r.est) e.est = true;
         e.mins = worked(e);
         await putEntry(e);
         n++;
@@ -2343,6 +2376,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     $('#sHolStart').value = String(Number(settings.holStart) || 1);
     $('#sClient').value = clientId();
     $('#sCheck').checked = settings.checkBeforeSend !== false;
+    $('#sAutoFill').checked = settings.autoFill !== false;
     $('#sHome').value = settings.homePostcode || '';
     $('#sTraffic').value = settings.trafficPct == null ? 20 : settings.trafficPct;
     $('#sBuffer').value = settings.bufferMins == null ? 10 : settings.bufferMins;
@@ -2369,6 +2403,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       holDays: Math.max(0, Number($('#sHolDays').value) || 0),
       holStart: Number($('#sHolStart').value) || 1,
       checkBeforeSend: $('#sCheck').checked,
+      autoFill: $('#sAutoFill').checked,
       homePostcode: normPC($('#sHome').value),
       trafficPct: $('#sTraffic').value === '' ? 20 : Math.max(0, Math.min(200, Number($('#sTraffic').value) || 0)),
       bufferMins: $('#sBuffer').value === '' ? 10 : Math.max(0, Math.min(120, Number($('#sBuffer').value) || 0)),
@@ -2615,6 +2650,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         }
       } else if (i < 5 && k <= today) items.push({ lvl: 'warn', t: nm + ' has nothing logged' + (stopsOn(k).length ? ' (jobs were scheduled).' : '.') });
     }
+    var nEst = 0; for (var q = 0; q < 7; q++) { var qe = entries[iso(addDays(mon, q))]; if (qe && qe.est) nEst++; }
+    if (nEst) items.push({ lvl: 'warn', t: prefix + nEst + (nEst === 1 ? ' day is' : ' days are') + ' an estimate (8:00 each) and will be sent as it is.' });
     var tgt = Math.round((Number(settings.weekTarget) || 0) * 60), exp = Math.round(tgt * (5 - Math.min(5, leave)) / 5);
     if (exp > 0 && iso(addDays(mon, 4)) <= today) {
       var diff = total - exp;
