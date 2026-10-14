@@ -366,23 +366,26 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     </section>
 
     <section id="view-sched" hidden>
-      <div class="weeknav">
-        <button class="iconbtn" id="prevSched" aria-label="Previous week">&lsaquo;</button>
-        <div class="mid"><div class="label">Schedule for week of</div><div id="schedLabel"></div></div>
-        <button class="iconbtn" id="nextSched" aria-label="Next week">&rsaquo;</button>
-      </div>
       <div class="card duecard" id="dueCard" hidden>
-        <div class="label">Schedule</div>
-        <p id="dueText" style="margin:0"></p>
+        <p id="dueText" style="margin:0;font-weight:600"></p>
         <div class="chips" id="dueChips"></div>
-        <button class="btn" id="dueStart" hidden>Start work</button>
       </div>
+      <div class="dayhead"><span class="dow" id="sDow"></span><span class="dlong" id="sLong"></span><span class="todaytag" id="sToday" hidden>Today</span></div>
+      <div class="datebar">
+        <button class="iconbtn" id="prevSched" aria-label="Previous day">&lsaquo;</button>
+        <div class="field"><input type="date" id="schedDate" aria-label="Date"></div>
+        <button class="iconbtn" id="nextSched" aria-label="Next day">&rsaquo;</button>
+      </div>
+      <div class="monthhead"><button class="linkbtn" id="schedTodayBtn" hidden>Go to today</button><span></span></div>
       <div id="schedDays" class="stack" style="gap:16px"></div>
+      <div class="stack" id="schedEmptyBox" hidden>
+        <p class="hint" style="font-size:0.9375rem">Nothing scheduled for this day.</p>
+        <button class="btn ghost" id="schedJump" hidden></button>
+      </div>
       <p class="hint" id="travelHint"></p>
-      <p class="hint" id="schedTap" hidden>Tap a day's heading to open its timesheet.</p>
-      <p class="hint" id="schedEmpty" hidden>No schedule saved for this week. Press Import schedule and paste your Friday email.</p>
       <div class="stack">
         <button class="btn" id="schedImport">Import schedule</button>
+        <button class="btn plain" id="schedClearDay" hidden>Remove this day's schedule</button>
         <button class="btn plain" id="schedClear" hidden>Remove this week's schedule</button>
       </div>
       <div class="card">
@@ -1107,55 +1110,74 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   var stopsOn = function (d) { return Array.isArray(schedule[d]) ? schedule[d] : []; };
 
   /* --- Schedule tab --- */
-  var schedWeek = mondayOf(new Date());
+  var schedDay = iso(new Date());
   function loggedText(d) {
     var e = entries[d];
     if (!e) return null;
     if (e.type) return TYPES[e.type];
     return e.end ? e.start + '–' + e.end : 'Started ' + e.start;
   }
+  function neighbourDay(from, dir) {
+    var keys = Object.keys(schedule).filter(function (k) { return stopsOn(k).length; }).sort();
+    return dir > 0 ? (keys.filter(function (k) { return k > from; })[0] || '') : (keys.filter(function (k) { return k < from; }).pop() || '');
+  }
   function renderSched() {
     if (!$('#schedDays')) return;
-    $('#schedLabel').textContent = shortDate(schedWeek) + ' – ' + shortDate(addDays(schedWeek, 4)) + ' ' + addDays(schedWeek, 4).getFullYear();
+    var k = schedDay, dt = parseISO(k), today = iso(new Date()), st = stopsOn(k);
+    $('#schedDate').value = k;
+    $('#sDow').textContent = dt.toLocaleDateString('en-GB', { weekday: 'long' });
+    $('#sLong').textContent = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    $('#sToday').hidden = k !== today;
+    $('#schedTodayBtn').hidden = k === today;
     var box = $('#schedDays'); box.innerHTML = '';
-    var any = false, today = iso(new Date()), days = [], allStops = [];
-    for (var i = 0; i < 7; i++) {
-      var dt = addDays(schedWeek, i), k = iso(dt), st = stopsOn(k);
-      if (!st.length) continue;
-      any = true;
+    var days = [];
+    if (st.length) {
       var card = mk('div', 'card daycard');
-      var head = mk('div', 'dh');
-      head.appendChild(mk('b', '', longDate(dt)));
       var lg = loggedText(k);
+      var head = mk('div', 'dh'); head.style.cursor = 'default';
+      head.appendChild(mk('span', 'label', st.length + (st.length === 1 ? ' stop' : ' stops')));
       head.appendChild(mk('span', 'pill', lg ? 'Logged ' + lg : (k <= today ? 'Not logged' : 'Upcoming')));
-      (function (kk) { head.addEventListener('click', function () { selDate = kk; loadForm(); setView('day'); }); })(k);
       card.appendChild(head);
-      st.forEach(function (s) { card.appendChild(stopEl(s, true)); });
+      st.forEach(function (x) { card.appendChild(stopEl(x, true)); });
       var acts = mk('div', 'stack'); acts.style.gap = '8px';
       var ub = mk('button', 'btn ghost'); ub.type = 'button'; ub.hidden = true;
       var nb = mk('button', 'btn ghost', 'Use sites as the timesheet note'); nb.type = 'button';
-      (function (kk, u, n) {
-        u.addEventListener('click', function () { useStartFor(kk, u.dataset.v); });
-        n.addEventListener('click', function () { useNoteFor(kk); });
-      })(k, ub, nb);
-      acts.appendChild(ub); acts.appendChild(nb); card.appendChild(acts);
+      var ob = mk('button', 'btn', 'Open this day on the timesheet'); ob.type = 'button';
+      ub.addEventListener('click', function () { useStartFor(k, ub.dataset.v); });
+      nb.addEventListener('click', function () { useNoteFor(k); });
+      ob.addEventListener('click', function () { selDate = k; loadForm(); setView('day'); });
+      acts.appendChild(ob); acts.appendChild(ub); acts.appendChild(nb); card.appendChild(acts);
       box.appendChild(card);
       days.push({ k: k, st: st, card: card, ub: ub });
-      allStops = allStops.concat(st);
     }
-    $('#schedEmpty').hidden = any;
-    $('#schedTap').hidden = !any;
-    $('#schedClear').hidden = !any;
+    $('#schedEmptyBox').hidden = !!st.length;
+    if (!st.length) {
+      var nx = neighbourDay(k, 1) || neighbourDay(k, -1), jb = $('#schedJump');
+      jb.hidden = !nx;
+      if (nx) { jb.textContent = (nx > k ? 'Go to next scheduled day: ' : 'Go to last scheduled day: ') + longDate(parseISO(nx)); jb.dataset.d = nx; }
+    }
+    $('#schedClearDay').hidden = !st.length;
+    $('#schedClear').hidden = !(function () { var m = mondayOf(dt); for (var i = 0; i < 7; i++) if (stopsOn(iso(addDays(m, i))).length) return true; return false; })();
     refreshPhones();
-    ensurePhones(allStops);
+    ensurePhones(st);
     startTravel(days);
     renderSearch();
   }
-  $('#prevSched').addEventListener('click', function () { schedWeek = addDays(schedWeek, -7); renderSched(); });
-  $('#nextSched').addEventListener('click', function () { schedWeek = addDays(schedWeek, 7); renderSched(); });
+  function gotoSched(d) { if (!d) return; schedDay = d; renderSched(); window.scrollTo(0, 0); }
+  $('#prevSched').addEventListener('click', function () { gotoSched(iso(addDays(parseISO(schedDay), -1))); });
+  $('#nextSched').addEventListener('click', function () { gotoSched(iso(addDays(parseISO(schedDay), 1))); });
+  $('#schedDate').addEventListener('change', function () { gotoSched($('#schedDate').value); });
+  $('#schedTodayBtn').addEventListener('click', function () { gotoSched(iso(new Date())); });
+  $('#schedJump').addEventListener('click', function () { gotoSched(this.dataset.d); });
+  $('#schedClearDay').addEventListener('click', function () {
+    if (!window.confirm('Remove the saved schedule for this day?')) return;
+    delete schedule[schedDay];
+    putSchedule(); renderSched(); renderDue(); toast('Schedule removed');
+  });
   $('#schedClear').addEventListener('click', function () {
-    if (!window.confirm('Remove the saved schedule for this week?')) return;
-    for (var i = 0; i < 7; i++) delete schedule[iso(addDays(schedWeek, i))];
+    if (!window.confirm('Remove the saved schedule for this whole week?')) return;
+    var m = mondayOf(parseISO(schedDay));
+    for (var i = 0; i < 7; i++) delete schedule[iso(addDays(m, i))];
     putSchedule(); renderSched(); renderDue(); toast('Schedule removed');
   });
 
@@ -1177,7 +1199,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
       var wrap = mk('div', 'daycard');
       var head = mk('div', 'dh'); head.appendChild(mk('b', '', longDate(parseISO(h.d))));
       var lg = loggedText(h.d); if (lg) head.appendChild(mk('span', 'pill', lg));
-      head.addEventListener('click', function () { selDate = h.d; loadForm(); setView('day'); });
+      head.addEventListener('click', function () { $('#schedQ').value = ''; gotoSched(h.d); });
       wrap.appendChild(head); wrap.appendChild(stopEl(h.s, false)); box.appendChild(wrap);
     });
     $('#schedCount').textContent = hits.length ? (hits.length > shown.length ? 'Showing ' + shown.length + ' of ' + hits.length + ' matches.' : hits.length + (hits.length === 1 ? ' match.' : ' matches.')) : 'No matches.';
@@ -1208,7 +1230,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     });
     if (!putSchedule()) { toast('Could not save. Try again.'); return; }
     $('#impSheet').hidden = true;
-    if (first) schedWeek = mondayOf(parseISO(first));
+    if (first) schedDay = (stopsOn(iso(new Date())).length ? iso(new Date()) : first);
     renderSched(); renderDue();
     toast('Schedule saved');
     var all = []; Object.keys(impParsed.days).forEach(function (d) { all = all.concat(impParsed.days[d]); });
@@ -1225,16 +1247,14 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     if (!needToday && !missed.length) { card.hidden = true; if (tabEl) tabEl.classList.remove('dot'); return; }
     card.hidden = false;
     if (tabEl) tabEl.classList.add('dot');
-    $('#dueText').textContent = (needToday ? 'You are scheduled today (' + todayStops.length + (todayStops.length === 1 ? ' stop' : ' stops') + ', first at ' + todayStops[0].time + ') and have not started logging.' : '') + (needToday && missed.length ? ' ' : '') + (missed.length ? 'Scheduled but no hours logged:' : '');
+    $('#dueText').textContent = 'Scheduled but no hours logged. Tap a day to open its timesheet:';
     var ch = $('#dueChips'); ch.innerHTML = '';
-    missed.forEach(function (k) {
-      var b = mk('button', 'chip', longDate(parseISO(k))); b.type = 'button';
+    (needToday ? [today] : []).concat(missed).forEach(function (k) {
+      var b = mk('button', 'chip', k === today ? 'Today' : longDate(parseISO(k))); b.type = 'button';
       b.addEventListener('click', function () { selDate = k; loadForm(); setView('day'); });
       ch.appendChild(b);
     });
-    $('#dueStart').hidden = !needToday;
   }
-  $('#dueStart').addEventListener('click', clockStart);
 
   /* --- phone numbers (NHS directory, remembered per postcode) --- */
   function putPhones() { return lsSet('hourslog:phones', phones); }
