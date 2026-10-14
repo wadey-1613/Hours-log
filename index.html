@@ -228,6 +228,8 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 .stoplines { color: var(--ink); font-size: 0.9375rem; }
 .stopwho { color: var(--muted); font-size: 0.875rem; }
 .stoptravel { font-size: 0.875rem; color: var(--accent); font-weight: 600; }
+.stopphone { font-size: 0.875rem; color: var(--muted); }
+.stopphone b { color: var(--ink); font-weight: 600; }
 .stopbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .stopbtns a, .stopbtns button { min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-weight: 600; font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; }
 .daycard { display: flex; flex-direction: column; gap: 4px; }
@@ -524,7 +526,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
           <div class="field"><label class="label" for="sTraffic">Traffic allowance (%)</label><input type="number" id="sTraffic" inputmode="numeric" min="0" max="200" step="5"></div>
           <div class="field"><label class="label" for="sBuffer">Extra minutes</label><input type="number" id="sBuffer" inputmode="numeric" min="0" max="120" step="5"></div>
         </div>
-        <p class="hint">Used to work out when to leave for each job. The drive time comes from free map services (postcodes.io and OSRM), so your home postcode and each job's postcode are sent to them. Normal driving time is increased by the allowance and the extra minutes, because the free service does not know about live traffic. Use the Directions buttons for live traffic.</p>
+        <p class="hint">Used to work out when to leave for each job. The drive time comes from free map services (postcodes.io and OSRM), so your home postcode and each job's postcode are sent to them. Phone numbers for each job are looked up in the NHS directory using its postcode. Normal driving time is increased by the allowance and the extra minutes, because the free service does not know about live traffic. Use the Directions buttons for live traffic.</p>
       </div>
       <div class="card">
         <h2>Send from Gmail</h2>
@@ -658,6 +660,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   var sends = {};
   var payslips = {};
   var schedule = {};
+  var phones = {};
   var formTouched = false;
   var ctx = 'week';
   var selDate = iso(new Date());
@@ -673,6 +676,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     sends = lsGet('hourslog:sends', {});
     payslips = lsGet('hourslog:payslips', {});
     schedule = lsGet('hourslog:schedule', {});
+    phones = lsGet('hourslog:phones', {});
     settings = Object.assign({}, settings, lsGet('hourslog:settings', {}));
     mode = 'local';
     onData();
@@ -1094,7 +1098,10 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     d.appendChild(h);
     if (s.lines.length || s.pc) d.appendChild(mk('div', 'stoplines', s.lines.concat(s.pc ? [s.pc] : []).join(', ')));
     if (s.contact) d.appendChild(mk('div', 'stopwho', 'Contact: ' + s.contact));
+    var pr = phones[normPC(s.pc)];
+    if (!withDir && pr && pr.num) d.appendChild(mk('div', 'stopwho', 'Phone: ' + pr.num));
     if (withDir) {
+      var ph = mk('div', 'stopphone'); ph._stop = s; d.appendChild(ph);
       d.appendChild(mk('div', 'stoptravel'));
       if (s.pc) {
         var b = mk('div', 'stopbtns');
@@ -1157,7 +1164,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     Object.keys(schedule).sort().reverse().forEach(function (d) {
       var dl = longDate(parseISO(d)).toLowerCase();
       stopsOn(d).forEach(function (s) {
-        var hay = [dl, s.time, s.id, s.note, s.lines.join(' '), s.pc, s.contact].join(' ').toLowerCase();
+        var hay = [dl, s.time, s.id, s.note, s.lines.join(' '), s.pc, s.contact, (phones[normPC(s.pc)] || {}).num || ''].join(' ').toLowerCase();
         if (hay.indexOf(q) >= 0) hits.push({ d: d, s: s });
       });
     });
@@ -1200,6 +1207,8 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     if (first) schedWeek = mondayOf(parseISO(first));
     renderSched(); renderDaySched(); renderDue();
     toast('Schedule saved');
+    var all = []; Object.keys(impParsed.days).forEach(function (d) { all = all.concat(impParsed.days[d]); });
+    ensurePhones(all);
   });
 
   /* --- reminder: scheduled days with no hours logged --- */
@@ -1220,6 +1229,100 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     $('#dueStart').hidden = !needToday;
   }
   $('#dueStart').addEventListener('click', clockStart);
+
+  /* --- phone numbers (NHS directory, remembered per postcode) --- */
+  function putPhones() { return lsSet('hourslog:phones', phones); }
+  function restorePhones(src) {
+    if (!src || typeof src !== 'object') return;
+    Object.keys(src).forEach(function (k) {
+      var r = src[k], pc = normPC(k);
+      if (!r || typeof r !== 'object' || !/^[A-Z0-9]{2,4} [0-9][A-Z]{2}$/.test(pc)) return;
+      phones[pc] = { num: String(r.num || '').slice(0, 30), name: String(r.name || '').slice(0, 80), src: r.src === 'manual' ? 'manual' : 'nhs', at: String(r.at || '').slice(0, 30), note: String(r.note || '').slice(0, 100) };
+    });
+    putPhones();
+  }
+  var GENERIC = { the: 1, and: 1, ltd: 1, limited: 1, nhs: 1, plc: 1, road: 1, street: 1, lane: 1, house: 1, of: 1 };
+  function nameTokens(str) { return String(str || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(function (w) { return w.length > 1 && !GENERIC[w]; }); }
+  function titleCase(x) { return String(x || '').toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }); }
+  async function nhsLookup(stop) {
+    var pc = normPC(stop.pc);
+    var base = 'https://directory.spineservices.nhs.uk/ORD/2-0-0/organisations';
+    var j = await fetchJSON(base + '?PostCode=' + encodeURIComponent(pc) + '&Status=Active&_format=json');
+    var list = (j && j.Organisations) || [];
+    if (!list.length) return { num: '', name: '', src: 'nhs', note: 'No NHS organisation is listed at ' + pc + '.' };
+    var want = nameTokens(stop.lines.slice(0, 3).join(' '));
+    var ranked = list.map(function (o) {
+      var ot = nameTokens(o.Name), shared = ot.filter(function (w) { return want.indexOf(w) >= 0; }).length;
+      return { o: o, score: shared ? shared / ot.length + shared * 0.01 : 0 };
+    }).sort(function (a, b) { return b.score - a.score; });
+    if (ranked[0].score === 0 && ranked.length > 1) return { num: '', name: '', src: 'nhs', note: ranked.length + ' organisations are listed at ' + pc + ' and none matched the site name.' };
+    for (var i = 0; i < Math.min(3, ranked.length); i++) {
+      if (i > 0 && ranked[i].score === 0) break;
+      var id = String(ranked[i].o.OrgId || '');
+      if (!/^[A-Za-z0-9]+$/.test(id)) continue;
+      var d = await fetchJSON(base + '/' + id + '?_format=json'), org = d && d.Organisation;
+      var c = org && org.Contacts && (org.Contacts.Contact || org.Contacts);
+      if (c && !Array.isArray(c)) c = [c];
+      var tel = (c || []).filter(function (x) { return x && String(x.type).toLowerCase() === 'tel' && x.value; })[0];
+      if (tel) return { num: String(tel.value).slice(0, 30), name: titleCase((org && org.Name) || ranked[i].o.Name).slice(0, 80), src: 'nhs', note: '' };
+    }
+    return { num: '', name: titleCase(ranked[0].o.Name).slice(0, 80), src: 'nhs', note: 'The NHS directory lists "' + titleCase(ranked[0].o.Name) + '" but no phone number.' };
+  }
+  var phoneTried = {}, phoneErr = {}, phoneBusy = false;
+  async function ensurePhones(stops) {
+    var todo = [], seen = {};
+    stops.forEach(function (s) { var k = normPC(s.pc); if (k && !phones[k] && !phoneTried[k] && !seen[k]) { seen[k] = 1; todo.push(s); } });
+    if (!todo.length || phoneBusy) return;
+    phoneBusy = true;
+    try {
+      for (var i = 0; i < Math.min(todo.length, 40); i++) {
+        var k = normPC(todo[i].pc); phoneTried[k] = true;
+        try {
+          var r = await nhsLookup(todo[i]);
+          if (!phones[k] || phones[k].src !== 'manual') { r.at = new Date().toISOString(); phones[k] = r; putPhones(); }
+          delete phoneErr[k];
+        } catch (err) { phoneErr[k] = 'Could not reach the NHS directory (' + (err && err.message ? err.message : 'error') + ').'; }
+        refreshPhones();
+      }
+    } finally { phoneBusy = false; refreshPhones(); }
+  }
+  function refreshPhones() {
+    document.querySelectorAll('#dayStops .stopphone').forEach(function (box) { fillPhone(box, box._stop); });
+  }
+  function fillPhone(box, s) {
+    box.innerHTML = '';
+    var k = normPC(s.pc); if (!k) return;
+    var r = phones[k];
+    var btns = box.parentNode.querySelector('.stopbtns');
+    box.parentNode.querySelectorAll('.phonebtn').forEach(function (b) { b.remove(); });
+    function addBtn(label, fn, first) {
+      var b = mk('button', 'phonebtn', label); b.type = 'button'; b.addEventListener('click', fn);
+      if (btns) { if (first) btns.insertBefore(b, btns.firstChild); else btns.appendChild(b); }
+    }
+    if (r && r.num) {
+      var a = mk('a', 'phonebtn', 'Call ' + r.num); a.href = 'tel:' + r.num.replace(/[^\d+]/g, '');
+      if (btns) btns.insertBefore(a, btns.firstChild);
+      box.appendChild(mk('span', '', r.src === 'manual' ? 'Phone entered by you' : 'Phone from the NHS directory' + (r.name ? ' (' + r.name + ')' : '') + '. Check it is the right site.'));
+      addBtn('Change number', function () { editPhone(s); });
+    } else if (r) {
+      box.appendChild(mk('span', '', 'No phone number found. ' + (r.note || '')));
+      addBtn('Add number', function () { editPhone(s); }, true);
+      addBtn('Look up again', function () { delete phones[k]; delete phoneTried[k]; putPhones(); refreshPhones(); ensurePhones([s]); });
+    } else if (phoneTried[k]) {
+      box.appendChild(mk('span', '', phoneErr[k] || 'Phone number not found yet.'));
+      addBtn('Add number', function () { editPhone(s); }, true);
+      addBtn('Try again', function () { delete phoneTried[k]; delete phoneErr[k]; refreshPhones(); ensurePhones([s]); });
+    } else box.appendChild(mk('span', '', 'Looking up phone number…'));
+  }
+  function editPhone(s) {
+    var k = normPC(s.pc), cur = phones[k] && phones[k].num || '';
+    var v = window.prompt('Phone number for ' + (s.lines[0] || k) + ' (leave empty to clear)', cur);
+    if (v === null) return;
+    v = v.trim().slice(0, 30);
+    if (!v) { delete phones[k]; delete phoneTried[k]; } else phones[k] = { num: v, name: '', src: 'manual', at: new Date().toISOString(), note: '' };
+    putPhones(); refreshPhones();
+    if (!v) ensurePhones([s]);
+  }
 
   /* --- travel time --- */
   var geoCache = lsGet('hourslog:geo', {}), routeCache = lsGet('hourslog:routes', {});
@@ -1259,6 +1362,8 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     card.hidden = false;
     var box = $('#dayStops'); box.innerHTML = '';
     st.forEach(function (s) { box.appendChild(stopEl(s, true)); });
+    refreshPhones();
+    ensurePhones(st);
     $('#useStart').hidden = true;
     var hint = $('#travelHint'), home = normPC(settings.homePostcode);
     if (!home) { hint.textContent = 'Add your home postcode in Setup to see when to leave.'; return; }
@@ -1762,7 +1867,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         try { var b = await idbGet(rec.assetId); if (b) files[rec.assetId] = { type: b.type || rec.contentType, b64: await blobToB64(b) }; } catch (e) {}
       }
     }
-    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule };
+    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule, phones: phones };
   }
   async function markBackedUp() {
     settings.lastBackup = new Date().toISOString();
@@ -1834,6 +1939,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         lsSet('hourslog:payslips', payslips);
       }
       var ns = restoreSchedule(data.schedule);
+      restorePhones(data.phones);
       loadForm(); renderWeek(); renderMonth(); renderPay(); renderSched(); showBackup(); showSync();
       toast('Restored ' + n + (n === 1 ? ' day' : ' days') + (ns ? ' and ' + ns + (ns === 1 ? ' scheduled day' : ' scheduled days') : ''));
     } catch (err) { toast('Could not read that file'); }
