@@ -601,7 +601,9 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 <div class="sheet" id="impSheet" hidden>
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="impTitle">
     <div class="head"><h2 id="impTitle">Import schedule</h2><button class="iconbtn" id="impClose" aria-label="Close" style="min-width:48px">&times;</button></div>
-    <div class="field"><label class="label" for="impText">Paste the schedule email here</label><textarea id="impText" rows="8" spellcheck="false" autocomplete="off"></textarea></div>
+    <p class="hint">Copy the schedule email in Outlook, then press Import schedule. It is picked up from your clipboard automatically. If nothing appears, press Paste from clipboard, or paste it into the box.</p>
+    <button class="btn ghost" id="impPaste">Paste from clipboard</button>
+    <div class="field"><label class="label" for="impText">Schedule email</label><textarea id="impText" rows="6" spellcheck="false" autocomplete="off"></textarea></div>
     <div class="status" id="impPrev" aria-live="polite"></div>
     <p class="hint warnline" id="impWarn"></p>
     <button class="btn" id="impSave" disabled>Save schedule</button>
@@ -1219,7 +1221,16 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     $('#impSave').disabled = !r.stops;
   }
   $('#impText').addEventListener('input', impCheck);
-  $('#schedImport').addEventListener('click', function () { $('#impText').value = ''; impCheck(); $('#impSheet').hidden = false; });
+  async function pasteClip(quiet) {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error('none');
+      var t = await navigator.clipboard.readText();
+      if (t && parseSchedule(t).stops) { $('#impText').value = t; impCheck(); toast('Schedule picked up from the clipboard'); return; }
+      if (!quiet) toast(t && t.trim() ? 'The clipboard does not look like a schedule' : 'The clipboard is empty');
+    } catch (err) { if (!quiet) toast('Could not read the clipboard. Paste it into the box instead.'); }
+  }
+  $('#schedImport').addEventListener('click', function () { $('#impText').value = ''; impCheck(); $('#impSheet').hidden = false; pasteClip(true); });
+  $('#impPaste').addEventListener('click', function () { pasteClip(false); });
   $('#impClose').addEventListener('click', function () { $('#impSheet').hidden = true; });
   $('#impSave').addEventListener('click', function () {
     if (!impParsed || !impParsed.stops) return;
