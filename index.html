@@ -338,6 +338,19 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 .seg3 button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .seg3 button[aria-checked="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
 @media (prefers-reduced-motion: reduce) { main > section:not([hidden]) { animation: none; } .btn, .iconbtn, .chip, .tab { transition: none; } }
+.syncbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 14px; background: var(--night-bg); color: var(--night); font-weight: 600; font-size: 0.875rem; }
+.syncbar[hidden] { display: none; }
+.syncbar .btn { min-height: 38px; padding: 0 14px; font-size: 0.8125rem; border-radius: 10px; background: var(--night); color: var(--night-bg); box-shadow: none; flex: none; }
+.hbig { font-family: var(--font-mono); font-weight: 700; font-size: 2.5rem; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.hsub { color: rgba(255, 255, 255, 0.84); font-size: 0.9375rem; }
+.hleave { font-weight: 650; color: #fff; }
+.hero .btn { background: #fff; color: #08394e; box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.55); }
+.hero .btn.ghost { background: rgba(255, 255, 255, 0.14); color: #fff; border: 1px solid rgba(255, 255, 255, 0.42); box-shadow: none; }
+.hero .btn:disabled { opacity: 0.55; }
+.tabs .inner { grid-template-columns: repeat(7, 1fr); gap: 1px; padding: 5px; }
+.tab { font-size: 0.625rem; min-height: 52px; border-radius: 18px; }
+.tab .ti { width: 21px; height: 21px; }
+.tab.dot::after { right: calc(50% - 18px); }
 </style>
 
 <body>
@@ -347,10 +360,34 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     <span class="who" id="who"></span>
   </header>
 
-  <p class="hint warnline" id="syncNote" hidden></p>
+  <div class="syncbar" id="syncNote" hidden><span id="syncText"></span><button type="button" class="btn" id="syncBtn">Back up now</button></div>
 
   <main>
-    <section id="view-day">
+    <section id="view-home">
+      <div class="card hero" id="hTodayCard">
+        <div class="label" id="hDate"></div>
+        <div id="hMain" class="stack" style="gap:6px"></div>
+        <div class="stack" id="hActions" style="gap:10px"></div>
+      </div>
+      <div class="card">
+        <div class="label">This week</div>
+        <div class="big" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="num" style="font-size:2.5rem" id="hWeekTotal">0:00</span><span class="dec" id="hWeekOf"></span></div>
+        <div class="scale" aria-hidden="true"><div class="seg" id="hWeekBar" style="left:0;width:0"></div></div>
+        <p class="hint" id="hWeekNote"></p>
+      </div>
+      <div class="card">
+        <div class="label">Needs attention</div>
+        <div id="hTodo"></div>
+      </div>
+      <div class="card">
+        <div class="label">Holiday</div>
+        <div class="dow" id="hHolBig" style="font-size:1.5rem"></div>
+        <p class="hint" id="hHolSmall"></p>
+      </div>
+      <p class="hint" id="hBackup"></p>
+    </section>
+
+    <section id="view-day" hidden>
       <div class="card fixcard" id="fixCard" hidden>
         <div class="label" style="color:inherit">Missing finish time</div>
         <p id="fixText"></p>
@@ -655,7 +692,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <p class="hint" id="storeNote"></p>
       </div>
 
-      <div class="card">
+      <div class="card" id="backupCard">
         <h2>Back up your hours</h2>
         <p class="hint">Your hours live on this phone. A backup saves your days, schedule, pay settings and payslips to a file you keep (save it to Files or iCloud Drive). Do this every few weeks. Restoring puts those days back; days in the file replace the same days here and all other days stay.</p>
         <p class="hint" id="backupInfo"></p>
@@ -670,7 +707,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 
 <nav class="tabs" aria-label="Sections">
   <div class="inner" role="tablist">
-    <button class="tab" role="tab" data-view="day" aria-selected="true"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Timesheet</span></button>
+    <button class="tab" role="tab" data-view="home" aria-selected="true"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15V15H9v5.5H5.5A1.5 1.5 0 0 1 4 19z"/></svg><span>Home</span></button>
+    <button class="tab" role="tab" data-view="day" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Timesheet</span></button>
     <button class="tab" role="tab" data-view="week" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg><span>Week</span></button>
     <button class="tab" role="tab" data-view="sched" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 1 0-13 0c0 5.4 6.5 11 6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span>Schedule</span></button>
     <button class="tab" role="tab" data-view="month" aria-selected="false"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9.5h16M4 14.5h16M9.5 4v16M14.5 4v16"/></svg><span>Month</span></button>
@@ -796,17 +834,26 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     renderMonth();
     renderPay();
     renderSched();
+    renderHome();
     $('#who').textContent = settings.name || '';
     showSync();
     $('#storeNote').textContent = 'Your hours are saved on this phone and work with no signal. Back them up in the section below every few weeks.';
   }
+  function daysSinceBackup() { return settings.lastBackup ? Math.floor((Date.now() - new Date(settings.lastBackup).getTime()) / 864e5) : null; }
   function showSync() {
     var el = $('#syncNote'); if (!el) return;
-    var n = Object.keys(entries).length;
-    var last = settings.lastBackup ? new Date(settings.lastBackup) : null;
-    var stale = !last || (Date.now() - last.getTime() > 30 * 864e5);
-    if (n > 0 && stale) { el.textContent = last ? 'Your last backup was over a month ago. Back up in Setup so your hours are safe.' : 'You have not backed up yet. Back up in Setup so your hours are safe.'; el.hidden = false; }
-    else { el.textContent = ''; el.hidden = true; }
+    var n = Object.keys(entries).length + Object.keys(schedule || {}).length;
+    var d = daysSinceBackup();
+    if (n > 0 && (d === null || d >= 7)) {
+      $('#syncText').textContent = d === null ? 'You have not backed up yet. Back up so your hours and schedule are safe.' : 'Last backup was ' + (d === 1 ? 'yesterday' : d + ' days ago') + '. Back up so nothing is lost.';
+      el.hidden = false;
+    } else el.hidden = true;
+  }
+  async function backupNow(btn) {
+    if ((settings.me || '').indexOf('@') > 0 && clientId()) return emailBackup(btn);
+    setView('setup');
+    var c = $('#backupCard'); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth' });
+    toast('Save a backup file or email one to yourself');
   }
   async function putEntry(e) {
     entries[e.date] = e;
@@ -848,8 +895,9 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 
   /* ---------- tabs ---------- */
   function setView(v) {
-    ['day', 'week', 'sched', 'month', 'pay', 'setup'].forEach(function (n) { $('#view-' + n).hidden = n !== v; });
+    ['home', 'day', 'week', 'sched', 'month', 'pay', 'setup'].forEach(function (n) { $('#view-' + n).hidden = n !== v; });
     document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.view === v ? 'true' : 'false'); });
+    if (v === 'home') renderHome();
     if (v === 'week') renderWeek();
     if (v === 'sched') renderSched();
     if (v === 'month') renderMonth();
@@ -1075,10 +1123,11 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   $('#fixEdit').addEventListener('click', function () { if (fixDate) { selDate = fixDate; loadForm(); window.scrollTo(0, 0); } });
 
   /* ---------- week ---------- */
-  function weekData() {
+  function weekData(ws) {
+    ws = ws || weekStart;
     var rows = [], total = 0, days = 0, nights = 0, leave = 0;
     for (var i = 0; i < 7; i++) {
-      var d = addDays(weekStart, i), e = entries[iso(d)];
+      var d = addDays(ws, i), e = entries[iso(d)];
       if (i >= 5 && !e) continue;
       var m = e ? worked(e) : 0;
       if (e && e.type) { if (i < 5) leave++; }
@@ -1518,6 +1567,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   var fmtDur = function (m) { m = Math.round(m); return m >= 60 ? Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm' : m + ' min'; };
   var hhmm = function (m) { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
 
+  function leaveTime(base, arrive) {
+    var pct = settings.trafficPct == null ? 20 : Number(settings.trafficPct) || 0, buf = settings.bufferMins == null ? 10 : Number(settings.bufferMins) || 0;
+    return Math.floor((arrive - (base * (1 + pct / 100) + buf)) / 5) * 5;
+  }
   var travelToken = 0;
   async function startTravel(days) {
     var hint = $('#travelHint'), home = normPC(settings.homePostcode), token = ++travelToken, today = iso(new Date());
@@ -1535,9 +1588,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         try {
           var base = await driveMins(from, s.pc);
           if (token !== travelToken) return;
-          var pct = settings.trafficPct == null ? 20 : Number(settings.trafficPct) || 0, buf = settings.bufferMins == null ? 10 : Number(settings.bufferMins) || 0;
-          var total = base * (1 + pct / 100) + buf, arrive = toMin(s.time);
-          var leave = Math.floor((arrive - total) / 5) * 5;
+          var leave = leaveTime(base, toMin(s.time));
           row.textContent = (i === 0 ? 'From home' : 'From ' + (st[i - 1].lines[0] || 'previous stop')) + ': about ' + fmtDur(base) + ' drive. Leave by ' + hhmm(leave) + ' to arrive on time.';
           if (i === 0) firstLeave = leave;
         } catch (err) {
@@ -1996,6 +2047,73 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   $('#prevPay').addEventListener('click', function () { payStart = new Date(payStart.getFullYear(), payStart.getMonth() - 1, 1); renderPay(); });
   $('#nextPay').addEventListener('click', function () { payStart = new Date(payStart.getFullYear(), payStart.getMonth() + 1, 1); renderPay(); });
 
+
+  /* ---------- home ---------- */
+  var homeToken = 0;
+  function goTimesheet(k) { selDate = k; loadForm(); setView('day'); }
+  function renderHome() {
+    if (!$('#view-home')) return;
+    var now = new Date(), today = iso(now), st = stopsOn(today), e = entries[today], token = ++homeToken;
+    $('#hDate').textContent = longDate(now);
+    var main = $('#hMain'), act = $('#hActions'); main.innerHTML = ''; act.innerHTML = '';
+    function btn(label, cls, fn) { var b = mk('button', 'btn' + (cls ? ' ' + cls : ''), label); b.type = 'button'; b.addEventListener('click', fn); act.appendChild(b); return b; }
+    if (e && e.type) {
+      main.appendChild(mk('div', 'hbig', TYPES[e.type])); main.appendChild(mk('div', 'hsub', 'Today is marked as ' + TYPES[e.type].toLowerCase() + '.'));
+    } else if (e && e.start && !e.end) {
+      var since = Math.max(0, now.getHours() * 60 + now.getMinutes() - toMin(e.start));
+      main.appendChild(mk('div', 'hbig', 'Since ' + e.start)); main.appendChild(mk('div', 'hsub', fmtHM(since) + ' so far today'));
+      btn('Finish work', '', async function () { await clockFinish(); renderHome(); });
+    } else if (e && e.start && e.end) {
+      main.appendChild(mk('div', 'hbig', fmtHM(worked(e)))); main.appendChild(mk('div', 'hsub', 'Worked today, ' + e.start + '–' + e.end));
+      btn('Open timesheet', 'ghost', function () { goTimesheet(today); });
+    } else {
+      if (st.length) {
+        main.appendChild(mk('div', 'hbig', st[0].time));
+        main.appendChild(mk('div', 'hsub', (st[0].lines[0] || 'First job') + (st.length > 1 ? ' · ' + st.length + ' stops today' : ' · 1 stop today')));
+        var lv = mk('div', 'hsub hleave'); main.appendChild(lv);
+        var home = normPC(settings.homePostcode);
+        if (home && st[0].pc) {
+          lv.textContent = 'Working out when to leave…';
+          driveMins(home, st[0].pc).then(function (base) {
+            if (token !== homeToken) return;
+            lv.textContent = 'Leave by ' + hhmm(leaveTime(base, toMin(st[0].time))) + ' · about ' + fmtDur(base) + ' drive';
+          }).catch(function () { if (token === homeToken) lv.textContent = ''; });
+        } else if (!home) lv.textContent = 'Add your home postcode in Setup to see when to leave.';
+      } else { main.appendChild(mk('div', 'hbig', 'No jobs today')); main.appendChild(mk('div', 'hsub', 'Nothing scheduled for today.')); }
+      btn('Start work', '', async function () { await clockStart(); renderHome(); });
+    }
+    if (st.length) btn("Today's schedule", 'ghost', function () { schedDay = today; setView('sched'); });
+
+    // this week
+    var mon = mondayOf(now), w = weekData(mon);
+    $('#hWeekTotal').textContent = fmtHM(w.total);
+    var tgt = Math.round((Number(settings.weekTarget) || 0) * 60), exp = Math.round(tgt * (5 - Math.min(5, w.leave)) / 5);
+    $('#hWeekOf').textContent = exp ? 'of ' + fmtHM(exp) : dec2(w.total) + ' h';
+    $('#hWeekBar').style.width = (exp ? Math.min(100, w.total / exp * 100) : 0) + '%';
+    var diff = w.total - exp;
+    $('#hWeekNote').textContent = w.days + (w.days === 1 ? ' day' : ' days') + ' worked' + (w.nights ? ', ' + w.nights + (w.nights === 1 ? ' night' : ' nights') + ' away' : '') + (exp ? ' · ' + (diff === 0 ? 'on target' : fmtHM(Math.abs(diff)) + (diff > 0 ? ' over' : ' to go')) : '');
+
+    // needs attention
+    var todo = [], box = $('#hTodo'); box.innerHTML = '';
+    Object.keys(entries).filter(function (k) { return k < today && isOpen(entries[k]); }).sort().forEach(function (k) {
+      todo.push({ t: longDate(parseISO(k)) + ' has no finish time', go: function () { goTimesheet(k); } });
+    });
+    for (var i = 1; i <= 14; i++) {
+      var k = iso(addDays(now, -i));
+      if (stopsOn(k).length && !entries[k]) (function (kk) { todo.push({ t: longDate(parseISO(kk)) + ' was scheduled but has no hours logged', go: function () { goTimesheet(kk); } }); })(k);
+    }
+    var prev = addDays(mon, -7), prevWorked = false;
+    for (var j = 0; j < 5; j++) { var pe = entries[iso(addDays(prev, j))]; if (pe && !pe.type) prevWorked = true; }
+    if (prevWorked && !isSent({ mon: iso(prev) })) todo.push({ t: "Last week's timesheet (week of " + shortDate(prev) + ") has not been sent", go: function () { weekStart = prev; setView('week'); } });
+    if (!todo.length) box.appendChild(mk('p', 'hint', 'All caught up. Nothing needs doing.'));
+    todo.slice(0, 6).forEach(function (x) { box.appendChild(lineEl(x.t, '›', '', '', x.go)); });
+
+    var h = holText();
+    $('#hHolBig').textContent = h.big; $('#hHolSmall').textContent = h.small;
+    var d = daysSinceBackup();
+    $('#hBackup').textContent = d === null ? 'No backup yet.' : 'Last backup: ' + (d === 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago') + '.';
+  }
+
   /* ---------- backup and restore ---------- */
   function showBackup() {
     $('#backupInfo').textContent = settings.lastBackup
@@ -2034,7 +2152,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   async function markBackedUp() {
     settings.lastBackup = new Date().toISOString();
     await putSettings();
-    showBackup(); showSync();
+    showBackup(); showSync(); renderHome();
   }
   $('#backupBtn').addEventListener('click', async function () {
     try {
@@ -2047,10 +2165,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       toast('Could not save the backup');
     }
   });
-  $('#backupMail').addEventListener('click', async function () {
-    var btn = this, to = (settings.me || '').trim();
+  async function emailBackup(btn) {
+    var to = (settings.me || '').trim();
     if (to.indexOf('@') < 1) { toast('Add your email in Setup first'); return; }
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
       var data = await buildBackup();
       var bytes = new TextEncoder().encode(JSON.stringify(data));
@@ -2058,8 +2176,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       await markBackedUp();
       toast('Backup emailed to you');
     } catch (err) { toast(gErrMsg(err)); }
-    finally { btn.disabled = false; }
-  });
+    finally { if (btn) btn.disabled = false; }
+  }
+  $('#backupMail').addEventListener('click', function () { emailBackup(this); });
+  $('#syncBtn').addEventListener('click', function () { backupNow(this); });
   $('#restoreFile').addEventListener('change', async function (ev) {
     var file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
