@@ -351,6 +351,15 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 .tab { font-size: 0.625rem; min-height: 52px; border-radius: 18px; }
 .tab .ti { width: 21px; height: 21px; }
 .tab.dot::after { right: calc(50% - 18px); }
+.ck { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.ck:first-of-type { border-top: 0; }
+.ck .ic { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 0.8125rem; margin-top: 1px; }
+.ck.ok .ic { background: var(--accent-soft); color: var(--accent); }
+.ck.warn .ic { background: var(--night-bg); color: var(--night); }
+.ck.bad .ic { background: var(--danger); color: #fff; }
+.ckopt { display: flex; gap: 12px; align-items: center; min-height: 44px; font-size: 0.9375rem; }
+.ckopt input { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
+.hbtn { cursor: pointer; }
 </style>
 
 <body>
@@ -379,7 +388,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <div class="label">Needs attention</div>
         <div id="hTodo"></div>
       </div>
-      <div class="card">
+      <div class="card hbtn" id="hHolCard">
         <div class="label">Holiday</div>
         <div class="dow" id="hHolBig" style="font-size:1.5rem"></div>
         <p class="hint" id="hHolSmall"></p>
@@ -596,10 +605,23 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <button class="btn ghost" id="saveAct">Save take-home</button>
         <p class="hint" id="actDiff"></p>
       </div>
-      <div class="card">
+      <div class="card" id="holCard">
         <div class="label">Holiday</div>
         <div class="dow" id="holBig" style="font-size:1.75rem"></div>
         <p class="hint" id="holYear"></p>
+        <div class="sum">
+          <div><div class="label">Taken</div><div class="mid2" id="holTaken">0</div></div>
+          <div><div class="label">Booked ahead</div><div class="mid2" id="holBooked">0</div></div>
+          <div><div class="label">Left</div><div class="mid2" id="holLeft">–</div></div>
+        </div>
+        <div id="holList"></div>
+        <div class="label">Book holiday</div>
+        <div class="row2">
+          <div class="field"><label class="label" for="hbFrom">First day</label><input type="date" id="hbFrom"></div>
+          <div class="field"><label class="label" for="hbTo">Last day</label><input type="date" id="hbTo"></div>
+        </div>
+        <button class="btn" id="hbBook">Book holiday</button>
+        <p class="hint">Weekends are skipped. You will be warned if a day already has scheduled jobs or something logged, or if it takes you over your allowance. Tap a booked holiday above to cancel it.</p>
       </div>
       <p class="hint">This is an estimate, not a payslip. Weeks belong to the month their Friday falls in. The last week of the month is paid up to your cap and any hours over it are paid the next month at the same rate. Tax is worked out month by month, so your real payslip can differ by a few pounds. Bonuses and one-off deductions go in Extras for the month. Student loans are not included.</p>
     </section>
@@ -660,6 +682,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       <div class="card">
         <h2>Contracted hours</h2>
         <div class="field"><label class="label" for="sTarget">Hours per week</label><input type="number" id="sTarget" inputmode="decimal" min="0" max="80" step="0.25"><p class="hint">The Week page shows how far over or under you are. Holiday, bank holiday and sick days reduce the target by one day each. Leave blank to switch it off.</p></div>
+      </div>
+      <div class="card">
+        <h2>Sending</h2>
+        <label class="switch"><span class="txt"><b>Check before sending</b><span class="hint">Shows a quick check of the week (missing days, very long or short days, hours against target) before the timesheet goes out</span></span><input type="checkbox" id="sCheck"><span class="track" aria-hidden="true"></span></label>
       </div>
       <div class="card">
         <h2>Travel</h2>
@@ -723,6 +749,13 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     <div id="sheetEmpty" hidden>
       <p>Add your email and the office addresses in Setup first.</p>
       <button class="btn" id="goSetup">Go to Setup</button>
+    </div>
+    <div id="sheetCheck" class="stack" style="gap:12px" hidden>
+      <div id="ckList"></div>
+      <label class="ckopt"><input type="checkbox" id="ckNever"><span>Don't show this check again</span></label>
+      <p class="hint" id="ckNote">You can turn it back on in Setup.</p>
+      <button class="btn" id="ckGo">Send now</button>
+      <button class="btn ghost" id="ckBack">Go back and fix</button>
     </div>
     <div id="sheetBody" class="stack" style="gap:14px">
       <div class="field"><span class="label">To</span><div class="sel" id="mTo"></div></div>
@@ -1814,9 +1847,68 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function updateHol() {
     var h = $('#holHint');
     if (!h) return;
-    if ($('#dtype').value === 'holiday') { var t = holText(); h.textContent = t.big + ' this leave year. ' + t.small + '.'; h.hidden = false; }
+    if ($('#dtype').value === 'holiday') { var t = holText(), nj = stopsOn(selDate).length; h.textContent = t.big + ' this leave year. ' + t.small + '.' + (nj ? ' Careful: ' + nj + (nj === 1 ? ' job is' : ' jobs are') + ' scheduled for this day.' : ''); h.hidden = false; }
     else h.hidden = true;
   }
+
+  function holStats() {
+    var ly = leaveYear(), a = iso(ly.from), b = iso(ly.to), today = iso(new Date()), taken = 0, list = [];
+    Object.keys(entries).forEach(function (k) {
+      if (k >= a && k < b && entries[k].type === 'holiday') { if (k <= today) taken++; else list.push(k); }
+    });
+    list.sort();
+    var allow = Number(settings.holDays) || 0;
+    return { taken: taken, booked: list.length, list: list, allow: allow, left: allow ? allow - taken - list.length : null };
+  }
+  function renderHoliday() {
+    if (!$('#holCard')) return;
+    var st = holStats();
+    $('#holTaken').textContent = st.taken; $('#holBooked').textContent = st.booked;
+    $('#holLeft').textContent = st.left == null ? '–' : st.left;
+    var box = $('#holList'); box.innerHTML = '';
+    var ranges = [];
+    st.list.forEach(function (k) {
+      var last = ranges[ranges.length - 1], d = parseISO(k);
+      if (last) {
+        var pe = parseISO(last.to), step = (pe.getDay() === 5) ? 3 : 1;
+        if (iso(addDays(pe, step)) === k) { last.to = k; last.days.push(k); return; }
+      }
+      ranges.push({ from: k, to: k, days: [k] });
+    });
+    ranges.slice(0, 12).forEach(function (r) {
+      var label = r.from === r.to ? longDate(parseISO(r.from)) : shortDate(parseISO(r.from)) + ' – ' + longDate(parseISO(r.to));
+      box.appendChild(lineEl(label, r.days.length + (r.days.length === 1 ? ' day' : ' days'), '', 'Booked · tap to cancel', async function () {
+        if (!window.confirm('Cancel this holiday (' + r.days.length + (r.days.length === 1 ? ' day' : ' days') + ')?')) return;
+        for (var i = 0; i < r.days.length; i++) await removeEntry(r.days[i]);
+        renderHoliday(); renderHome(); renderWeek(); loadForm(); toast('Holiday cancelled');
+      }));
+    });
+    if (!ranges.length) box.appendChild(mk('p', 'hint', 'No holiday booked ahead.'));
+  }
+  $('#hbBook').addEventListener('click', async function () {
+    var f = $('#hbFrom').value, t = $('#hbTo').value || f;
+    if (!f) { toast('Pick the first day'); return; }
+    if (t < f) { toast('The last day is before the first day'); return; }
+    var days = [];
+    for (var d = parseISO(f); iso(d) <= t && days.length < 60; d = addDays(d, 1)) if ((d.getDay() + 6) % 7 < 5) days.push(iso(d));
+    if (!days.length) { toast('Those days are all weekend'); return; }
+    var fresh = days.filter(function (k) { return !(entries[k] && entries[k].type === 'holiday'); });
+    if (!fresh.length) { toast('Already booked'); return; }
+    var jobs = fresh.filter(function (k) { return stopsOn(k).length; });
+    var over = fresh.filter(function (k) { return entries[k]; });
+    var msgs = [], st = holStats();
+    if (jobs.length) msgs.push(jobs.length + (jobs.length === 1 ? ' day has' : ' days have') + ' scheduled jobs: ' + jobs.slice(0, 4).map(function (k) { return shortDate(parseISO(k)); }).join(', ') + (jobs.length > 4 ? '…' : '') + '.');
+    if (over.length) msgs.push(over.length + (over.length === 1 ? ' day already has' : ' days already have') + ' something logged and would be replaced.');
+    if (st.allow && st.taken + st.booked + fresh.length > st.allow) msgs.push('This takes you ' + (st.taken + st.booked + fresh.length - st.allow) + ' over your allowance of ' + st.allow + ' days.');
+    if (msgs.length && !window.confirm(msgs.join('\n') + '\n\nBook anyway?')) return;
+    try {
+      for (var i = 0; i < fresh.length; i++) await putEntry({ date: fresh[i], type: 'holiday', start: '', end: '', brk: 0, night: false, note: '', mins: 0 });
+    } catch (err) { toast('Could not save. Try again.'); return; }
+    $('#hbFrom').value = ''; $('#hbTo').value = '';
+    renderHoliday(); renderHome(); renderWeek(); renderMonth(); loadForm();
+    toast('Booked ' + fresh.length + (fresh.length === 1 ? ' day' : ' days'));
+  });
+  $('#hHolCard').addEventListener('click', function () { setView('pay'); var c = $('#holCard'); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth' }); });
 
   /* ---------- pay ---------- */
   var payStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -1894,6 +1986,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (c.carryOut > 0) wb.appendChild(lineEl('Carried to next month', fmtHM(c.carryOut), 'neg'));
     renderSlip(c.net);
     var h = holText(), ly = leaveYear();
+    renderHoliday();
     $('#holBig').textContent = h.big;
     $('#holYear').textContent = h.small + '. Leave year ' + shortDate(ly.from) + ' ' + ly.from.getFullYear() + ' to ' + shortDate(addDays(ly.to, -1)) + ' ' + addDays(ly.to, -1).getFullYear() + '.';
   }
@@ -2109,7 +2202,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     todo.slice(0, 6).forEach(function (x) { box.appendChild(lineEl(x.t, '›', '', '', x.go)); });
 
     var h = holText();
-    $('#hHolBig').textContent = h.big; $('#hHolSmall').textContent = h.small;
+    var hs = holStats();
+    $('#hHolBig').textContent = h.big; $('#hHolSmall').textContent = h.small + (hs.booked ? ' · ' + hs.booked + (hs.booked === 1 ? ' day' : ' days') + ' booked ahead' : '') + ' · tap to plan';
     var d = daysSinceBackup();
     $('#hBackup').textContent = d === null ? 'No backup yet.' : 'Last backup: ' + (d === 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago') + '.';
   }
@@ -2248,6 +2342,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     $('#sHolDays').value = Number(settings.holDays) > 0 ? settings.holDays : '';
     $('#sHolStart').value = String(Number(settings.holStart) || 1);
     $('#sClient').value = clientId();
+    $('#sCheck').checked = settings.checkBeforeSend !== false;
     $('#sHome').value = settings.homePostcode || '';
     $('#sTraffic').value = settings.trafficPct == null ? 20 : settings.trafficPct;
     $('#sBuffer').value = settings.bufferMins == null ? 10 : settings.bufferMins;
@@ -2273,6 +2368,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       gClientId: $('#sClient').value.trim(),
       holDays: Math.max(0, Number($('#sHolDays').value) || 0),
       holStart: Number($('#sHolStart').value) || 1,
+      checkBeforeSend: $('#sCheck').checked,
       homePostcode: normPC($('#sHome').value),
       trafficPct: $('#sTraffic').value === '' ? 20 : Math.max(0, Math.min(200, Number($('#sTraffic').value) || 0)),
       bufferMins: $('#sBuffer').value === '' ? 10 : Math.max(0, Math.min(120, Number($('#sBuffer').value) || 0)),
@@ -2320,6 +2416,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     var to = recipients();
     $('#sheetEmpty').hidden = to.length > 0;
     $('#sheetBody').hidden = to.length === 0;
+    $('#sheetCheck').hidden = true; checkProceed = null;
     if (to.length) {
       $('#mTo').textContent = to.join(', ');
       $('#mSub').textContent = subject();
@@ -2500,6 +2597,69 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (c === 'api') return 'Gmail refused it' + (err.status ? ' (' + err.status + ')' : '') + (err.message ? ': ' + err.message : '') + '. Check the Gmail API is switched on in your Google project.';
     return 'Could not send. Use Share to Mail or Outlook instead.';
   }
+
+  /* ---------- check before sending ---------- */
+  var checkOn = function () { return settings.checkBeforeSend !== false; };
+  var checkProceed = null;
+  function checkWeek(mon, prefix) {
+    var items = [], today = iso(new Date()), total = 0, days = 0, leave = 0;
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(mon, i), k = iso(d), e = entries[k], nm = prefix + longDate(d);
+      if (e) {
+        if (e.type) { if (i < 5) leave++; }
+        else if (isOpen(e)) items.push({ lvl: 'bad', t: nm + ' has a start but no finish time. Fix it before sending.' });
+        else {
+          var m = worked(e); total += m; days++;
+          if (m > 720) items.push({ lvl: 'warn', t: nm + ' is ' + fmtHM(m) + ' long. Check the start and finish.' });
+          else if (m > 0 && m < 120) items.push({ lvl: 'warn', t: nm + ' is only ' + fmtHM(m) + '. Check the start and finish.' });
+        }
+      } else if (i < 5 && k <= today) items.push({ lvl: 'warn', t: nm + ' has nothing logged' + (stopsOn(k).length ? ' (jobs were scheduled).' : '.') });
+    }
+    var tgt = Math.round((Number(settings.weekTarget) || 0) * 60), exp = Math.round(tgt * (5 - Math.min(5, leave)) / 5);
+    if (exp > 0 && iso(addDays(mon, 4)) <= today) {
+      var diff = total - exp;
+      if (Math.abs(diff) > Math.max(60, exp * 0.1)) items.push({ lvl: 'warn', t: prefix + 'Total ' + fmtHM(total) + ' is ' + fmtHM(Math.abs(diff)) + (diff > 0 ? ' over' : ' under') + ' your ' + fmtHM(exp) + ' target.' });
+    }
+    return { items: items, total: total, days: days };
+  }
+  function buildChecks() {
+    var weeks = ctx === 'month' ? ticked().map(function (g) { return parseISO(g.mon); }) : [weekStart];
+    var items = [], total = 0, days = 0;
+    weeks.forEach(function (mon) {
+      var r = checkWeek(mon, weeks.length > 1 ? 'Week of ' + shortDate(mon) + ': ' : '');
+      items = items.concat(r.items); total += r.total; days += r.days;
+    });
+    var order = { bad: 0, warn: 1 };
+    items.sort(function (a, b) { return order[a.lvl] - order[b.lvl]; });
+    return { items: items, total: total, days: days, blocked: items.some(function (x) { return x.lvl === 'bad'; }) };
+  }
+  function closeCheck() { $('#sheetCheck').hidden = true; $('#sheetBody').hidden = false; checkProceed = null; $('#sheetTitle').textContent = ctx === 'month' ? 'Send ticked weeks' : 'Email timesheet'; }
+  function runWithCheck(label, fn) {
+    if (!checkOn()) { fn(); return; }
+    var r = buildChecks(), box = $('#ckList'); box.innerHTML = '';
+    r.items.forEach(function (x) {
+      var row = mk('div', 'ck ' + x.lvl); row.appendChild(mk('span', 'ic', x.lvl === 'bad' ? '!' : '?')); row.appendChild(mk('span', '', x.t)); box.appendChild(row);
+    });
+    var sum = mk('div', 'ck ok'); sum.appendChild(mk('span', 'ic', '✓'));
+    sum.appendChild(mk('span', '', r.days + (r.days === 1 ? ' day' : ' days') + ', ' + fmtHM(r.total) + ' hours (' + dec2(r.total) + ' h)' + (r.items.length ? '' : '. Nothing looks wrong.')));
+    box.appendChild(sum);
+    $('#ckGo').textContent = label; $('#ckGo').disabled = r.blocked; $('#ckNever').checked = false;
+    checkProceed = fn;
+    $('#sheetBody').hidden = true; $('#sheetCheck').hidden = false; $('#sheetTitle').textContent = 'Check before sending';
+  }
+  $('#ckBack').addEventListener('click', closeCheck);
+  $('#ckGo').addEventListener('click', async function () {
+    var fn = checkProceed, never = $('#ckNever').checked;
+    closeCheck();
+    if (never) {
+      settings.checkBeforeSend = false;
+      try { await putSettings(); } catch (e) {}
+      $('#sCheck').checked = false;
+      toast('Check turned off. You can turn it on in Setup.');
+    }
+    if (fn) fn();
+  });
+
   async function sendNow() {
     var to = recipients();
     if (!to.length) { sendMsg('Add your email in Setup first.', false); return; }
@@ -2529,8 +2689,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       } else { await saveFile(fname(), f); sendMsg('Your phone cannot share from here, so the file was saved instead.', false); }
     } catch (err) { if (!(err && err.name === 'AbortError')) sendMsg('Could not open the share sheet.', false); }
   }
-  $('#shareBtn').addEventListener('click', shareNow);
-  $('#sendBtn').addEventListener('click', sendNow);
+  $('#shareBtn').addEventListener('click', function () { runWithCheck('Share', shareNow); });
+  $('#sendBtn').addEventListener('click', function () { runWithCheck($('#sendBtn').textContent, sendNow); });
   $('#emailBtn').addEventListener('click', function () { openEmail('week'); });
   $('#sheetClose').addEventListener('click', closeEmail);
   $('#sheet').addEventListener('click', function (ev) { if (ev.target === $('#sheet')) closeEmail(); });
