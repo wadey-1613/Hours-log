@@ -360,6 +360,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 .ckopt { display: flex; gap: 12px; align-items: center; min-height: 44px; font-size: 0.9375rem; }
 .ckopt input { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
 .hbtn { cursor: pointer; }
+.reccode { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700; letter-spacing: 0.12em; padding: 12px; background: var(--surface-2); border: 1px dashed var(--accent); border-radius: 12px; text-align: center; user-select: all; -webkit-user-select: all; }
+.lockicon { width: 64px; height: 64px; border-radius: 20px; background: var(--hero); display: grid; place-items: center; margin-inline: auto; box-shadow: 0 10px 24px -10px var(--accent); }
+.lockicon svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#payLock { text-align: center; align-items: stretch; }
 </style>
 
 <body>
@@ -569,6 +573,15 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     </section>
 
     <section id="view-pay" hidden>
+      <div class="card" id="payLock" hidden>
+        <div class="lockicon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="3"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg></div>
+        <h2>Pay is locked</h2>
+        <p class="hint">Unlock with Face ID to see your pay.</p>
+        <button class="btn" id="payUnlock">Unlock with Face ID</button>
+        <button class="linkbtn" id="payRecover">Use recovery code</button>
+        <p class="hint" id="payLockMsg"></p>
+      </div>
+      <div id="payBody" class="stack" style="gap:16px">
       <div class="weeknav">
         <button class="iconbtn" id="prevPay" aria-label="Previous month">&lsaquo;</button>
         <div class="mid"><div class="label">Pay for</div><div id="payLabel"></div></div>
@@ -606,6 +619,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <button class="btn ghost" id="saveAct">Save take-home</button>
         <p class="hint" id="actDiff"></p>
       </div>
+      <p class="hint">This is an estimate, not a payslip. Weeks belong to the month their Friday falls in. The last week of the month is paid up to your cap and any hours over it are paid the next month at the same rate. Tax is worked out month by month, so your real payslip can differ by a few pounds. Bonuses and one-off deductions go in Extras for the month. Student loans are not included.</p>
+      </div>
       <div class="card" id="holCard">
         <div class="label">Holiday</div>
         <div class="dow" id="holBig" style="font-size:1.75rem"></div>
@@ -624,7 +639,6 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <button class="btn" id="hbBook">Book holiday</button>
         <p class="hint">Weekends are skipped. You will be warned if a day already has scheduled jobs or something logged, or if it takes you over your allowance. Tap a booked holiday above to cancel it.</p>
       </div>
-      <p class="hint">This is an estimate, not a payslip. Weeks belong to the month their Friday falls in. The last week of the month is paid up to your cap and any hours over it are paid the next month at the same rate. Tax is worked out month by month, so your real payslip can differ by a few pounds. Bonuses and one-off deductions go in Extras for the month. Student loans are not included.</p>
     </section>
 
     <section id="view-setup" hidden>
@@ -687,6 +701,17 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       <div class="card">
         <h2>Last week of the month</h2>
         <label class="switch"><span class="txt"><b>Fill in 40 hours automatically</b><span class="hint">When the last week of a month starts, any empty weekdays are filled in as 8-hour days (40 hours) so the week can be sent and paid early. They are marked as estimates until you enter the real times</span></span><input type="checkbox" id="sAutoFill"><span class="track" aria-hidden="true"></span></label>
+      </div>
+      <div class="card">
+        <h2>Privacy</h2>
+        <label class="switch"><span class="txt"><b>Lock Pay with Face ID</b><span class="hint">Your pay stays hidden until you unlock it with Face ID (or your phone passcode). It locks again when you leave the app, or the Pay tab for a minute</span></span><input type="checkbox" id="sLock"><span class="track" aria-hidden="true"></span></label>
+        <div class="field" id="lockCodeBox" hidden>
+          <span class="label">Recovery code</span>
+          <div class="reccode" id="lockCode"></div>
+          <p class="hint">Write this down now and keep it somewhere safe. It is the only way back in if Face ID stops working, for example if the passkey is deleted. It will not be shown again.</p>
+          <button class="btn ghost" id="lockCodeDone" type="button">I have saved it</button>
+        </div>
+        <p class="hint warnline" id="lockMsg"></p>
       </div>
       <div class="card">
         <h2>Sending</h2>
@@ -951,15 +976,98 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme); } catch (e) {}
   syncTheme();
 
+
+  /* ---------- privacy lock for Pay (Face ID through the phone's passkey) ---------- */
+  var LOCK_KEY = 'hourslog:lock';
+  var lockCfg = function () { var c = lsGet(LOCK_KEY, null); return c && c.id ? c : null; };
+  var payUnlocked = false, payGrace = 0, currentView = 'home', lockBusy = false;
+  var rnd = function (n) { return crypto.getRandomValues(new Uint8Array(n)); };
+  function b64u(buf) { var u = new Uint8Array(buf), t = ''; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(str) { str = str.replace(/-/g, '+').replace(/_/g, '/'); while (str.length % 4) str += '='; var bin = atob(str), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  var lockSupported = function () { return !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext && window.crypto && crypto.subtle); };
+  async function faceCreate() {
+    var cred = await navigator.credentials.create({ publicKey: {
+      challenge: rnd(32), rp: { name: 'Hours Log' }, user: { id: rnd(16), name: 'hours-log', displayName: 'Hours Log' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      timeout: 60000, attestation: 'none'
+    } });
+    return b64u(cred.rawId);
+  }
+  async function faceVerify(id) {
+    var a = await navigator.credentials.get({ publicKey: {
+      challenge: rnd(32), allowCredentials: [{ type: 'public-key', id: unb64u(id), transports: ['internal'] }],
+      userVerification: 'required', timeout: 60000
+    } });
+    if (!a) throw { name: 'NotAllowedError' };
+  }
+  async function sha256Hex(txt) { var d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)); return Array.prototype.map.call(new Uint8Array(d), function (x) { return x.toString(16).padStart(2, '0'); }).join(''); }
+  function newRecoveryCode() { var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = rnd(8), t = ''; for (var i = 0; i < 8; i++) t += A[r[i] % A.length]; return t.slice(0, 4) + '-' + t.slice(4); }
+  var normCode = function (c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); };
+  function payLocked() { return !!lockCfg() && !(payUnlocked && (currentView === 'pay' || Date.now() < payGrace)); }
+  function scrubPay() {
+    ['#pNet', '#pHours', '#pLines', '#pWeeks', '#slipBody', '#actDiff', '#pWarn', '#payLabel', '#slipMsg'].forEach(function (q) { var x = $(q); if (x) x.textContent = ''; });
+    ['#actNet', '#exBonus', '#exDeduct'].forEach(function (q) { var x = $(q); if (x) x.value = ''; });
+  }
+  function syncLockUI() { var sw = $('#sLock'); if (sw) sw.checked = !!lockCfg(); }
+  async function tryUnlock(auto) {
+    var cfg = lockCfg(); if (!cfg || lockBusy) return;
+    lockBusy = true; $('#payLockMsg').textContent = '';
+    try { await faceVerify(cfg.id); payUnlocked = true; lockBusy = false; renderPay(); }
+    catch (err) {
+      $('#payLockMsg').textContent = err && err.name === 'NotAllowedError' ? (auto ? '' : 'Face ID was cancelled or did not match. Try again.') : 'Could not use Face ID here (' + ((err && err.name) || 'error') + '). If this keeps happening, use your recovery code.';
+    } finally { lockBusy = false; }
+  }
+  $('#payUnlock').addEventListener('click', function () { tryUnlock(false); });
+  $('#payRecover').addEventListener('click', async function () {
+    var cfg = lockCfg(); if (!cfg) return;
+    var code = window.prompt('Enter your recovery code'); if (!code) return;
+    if (cfg.rc && (await sha256Hex(normCode(code))) === cfg.rc) {
+      try { localStorage.removeItem(LOCK_KEY); } catch (e) {}
+      payUnlocked = true; syncLockUI(); renderPay();
+      toast('Lock removed. You can set it up again in Setup.');
+    } else toast('That code is not right');
+  });
+  $('#sLock').addEventListener('change', async function () {
+    var box = this, on = box.checked;
+    if (lockBusy) { box.checked = !on; return; }
+    lockBusy = true; $('#lockMsg').textContent = '';
+    try {
+      if (on) {
+        if (!lockSupported()) throw { name: 'Unsupported' };
+        var id = await faceCreate(), code = newRecoveryCode();
+        if (!lsSet(LOCK_KEY, { id: id, rc: await sha256Hex(normCode(code)), at: new Date().toISOString() })) throw { name: 'Storage' };
+        payUnlocked = true; payGrace = Date.now() + 60000;
+        $('#lockCode').textContent = code; $('#lockCodeBox').hidden = false;
+        toast('Pay is now locked with Face ID');
+      } else {
+        await faceVerify(lockCfg().id);
+        try { localStorage.removeItem(LOCK_KEY); } catch (e) {}
+        $('#lockCodeBox').hidden = true;
+        toast('Pay lock turned off');
+      }
+    } catch (err) {
+      box.checked = !on;
+      var nm = (err && err.name) || 'error';
+      $('#lockMsg').textContent = on ? (nm === 'Unsupported' ? 'Face ID is not available in this browser. Open the app from your home screen in Safari and try again.' : nm === 'NotAllowedError' ? 'Face ID was cancelled, so the lock was not turned on.' : 'Could not turn the lock on (' + nm + ').') : 'Face ID did not match, so the lock stays on.';
+    } finally { lockBusy = false; syncLockUI(); renderPay(); }
+  });
+  $('#lockCodeDone').addEventListener('click', function () { $('#lockCodeBox').hidden = true; $('#lockCode').textContent = ''; });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && lockCfg()) { payUnlocked = false; if (currentView === 'pay') renderPay(); }
+  });
+
   /* ---------- tabs ---------- */
   function setView(v) {
+    if (currentView === 'pay' && v !== 'pay') payGrace = Date.now() + 60000;
+    currentView = v;
     ['home', 'day', 'week', 'sched', 'month', 'pay', 'setup'].forEach(function (n) { $('#view-' + n).hidden = n !== v; });
     document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.view === v ? 'true' : 'false'); });
     if (v === 'home') renderHome();
     if (v === 'week') renderWeek();
     if (v === 'sched') renderSched();
     if (v === 'month') renderMonth();
-    if (v === 'pay') renderPay();
+    if (v === 'pay') { renderPay(); if (payLocked()) tryUnlock(true); }
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('.tab').forEach(function (b) { b.addEventListener('click', function () { setView(b.dataset.view); }); });
@@ -1990,6 +2098,9 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   }
   function renderPay() {
     if (!$('#payLabel')) return;
+    var lk = payLocked();
+    $('#payLock').hidden = !lk; $('#payBody').hidden = lk;
+    if (lk) { scrubPay(); return; }
     $('#payLabel').textContent = payStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     var c = computePay(payStart);
     $('#pNet').textContent = gbp(c.net);
@@ -2376,6 +2487,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     $('#sHolStart').value = String(Number(settings.holStart) || 1);
     $('#sClient').value = clientId();
     $('#sCheck').checked = settings.checkBeforeSend !== false;
+    syncLockUI();
     $('#sAutoFill').checked = settings.autoFill !== false;
     $('#sHome').value = settings.homePostcode || '';
     $('#sTraffic').value = settings.trafficPct == null ? 20 : settings.trafficPct;
