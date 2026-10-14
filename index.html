@@ -172,8 +172,8 @@ td.t button { font-weight: 600; }
 .pill { display: inline-block; font-family: var(--font-body); font-size: 0.6875rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--night-bg); color: var(--night); }
 
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 5; }
-.tabs .inner { display: grid; grid-template-columns: repeat(5, 1fr); width: 100%; max-width: 520px; }
-.tab { background: none; border: 0; border-top: 3px solid transparent; min-height: 60px; font-family: var(--font-display); font-weight: 600; font-size: 1.0625rem; letter-spacing: 0.02em; color: var(--muted); }
+.tabs .inner { display: grid; grid-template-columns: repeat(6, 1fr); width: 100%; max-width: 520px; }
+.tab { background: none; border: 0; border-top: 3px solid transparent; min-height: 60px; font-family: var(--font-display); font-weight: 600; font-size: 0.9375rem; letter-spacing: 0; color: var(--muted); }
 .tab[aria-selected="true"] { color: var(--accent); border-top-color: var(--accent); }
 
 .sheet { position: fixed; inset: 0; background: var(--scrim); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
@@ -219,6 +219,21 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 .viewer .vbody img { display: block; width: 100%; height: auto; }
 .viewer .vbody iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
 .viewer .vmsg { padding: 10px 12px; font-size: 0.875rem; color: var(--muted); }
+.stop { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
+.stop:first-child { border-top: 0; }
+.stoph { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stopt { font-family: var(--font-mono); font-weight: 700; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.stopid { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.stopnote { color: var(--night); font-weight: 600; }
+.stoplines { color: var(--ink); font-size: 0.9375rem; }
+.stopwho { color: var(--muted); font-size: 0.875rem; }
+.stoptravel { font-size: 0.875rem; color: var(--accent); font-weight: 600; }
+.stopbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.stopbtns a, .stopbtns button { min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-weight: 600; font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; }
+.daycard { display: flex; flex-direction: column; gap: 4px; }
+.daycard .dh { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; min-height: 44px; }
+.daycard .dh b { font-family: var(--font-display); font-size: 1.125rem; }
+.duecard { border-color: var(--accent); }
 .toast { position: fixed; left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-width: 488px; margin-inline: auto; background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 8px; z-index: 20; font-size: 0.9375rem; }
 .toast[hidden] { display: none; }
 </style>
@@ -244,6 +259,13 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         </div>
       </div>
 
+      <div class="card duecard" id="dueCard" hidden>
+        <div class="label">Schedule</div>
+        <p id="dueText" style="margin:0"></p>
+        <div class="chips" id="dueChips"></div>
+        <button class="btn" id="dueStart" hidden>Start work</button>
+      </div>
+
       <div class="card">
         <div class="label">Clock</div>
         <div class="clockrow">
@@ -258,6 +280,16 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         <button class="iconbtn" id="prevDay" aria-label="Previous day">&lsaquo;</button>
         <div class="field"><input type="date" id="dayDate" aria-label="Date"></div>
         <button class="iconbtn" id="nextDay" aria-label="Next day">&rsaquo;</button>
+      </div>
+
+      <div class="card" id="daySched" hidden>
+        <div class="label">Scheduled for this day</div>
+        <div id="dayStops"></div>
+        <div class="stack" style="gap:8px">
+          <button class="btn ghost" id="useStart" hidden></button>
+          <button class="btn ghost" id="useNote">Use sites as the day's note</button>
+        </div>
+        <p class="hint" id="travelHint"></p>
       </div>
 
       <div class="card">
@@ -343,6 +375,26 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
       <div class="stack">
         <button class="btn" id="emailBtn">Email timesheet</button>
         <button class="btn ghost" id="dlBtn">Download spreadsheet</button>
+      </div>
+    </section>
+
+    <section id="view-sched" hidden>
+      <div class="weeknav">
+        <button class="iconbtn" id="prevSched" aria-label="Previous week">&lsaquo;</button>
+        <div class="mid"><div class="label">Schedule for week of</div><div id="schedLabel"></div></div>
+        <button class="iconbtn" id="nextSched" aria-label="Next week">&rsaquo;</button>
+      </div>
+      <div id="schedDays" class="stack" style="gap:16px"></div>
+      <p class="hint" id="schedEmpty" hidden>No schedule saved for this week. Press Import schedule and paste your Friday email.</p>
+      <div class="stack">
+        <button class="btn" id="schedImport">Import schedule</button>
+        <button class="btn plain" id="schedClear" hidden>Remove this week's schedule</button>
+      </div>
+      <div class="card">
+        <h2>Search past schedules</h2>
+        <div class="field"><label class="label" for="schedQ">Site, job number, name, postcode or note</label><input type="search" id="schedQ" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div id="schedResults"></div>
+        <p class="hint" id="schedCount"></p>
       </div>
     </section>
 
@@ -466,6 +518,15 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         <div class="field"><label class="label" for="sTarget">Hours per week</label><input type="number" id="sTarget" inputmode="decimal" min="0" max="80" step="0.25"><p class="hint">The Week page shows how far over or under you are. Holiday, bank holiday and sick days reduce the target by one day each. Leave blank to switch it off.</p></div>
       </div>
       <div class="card">
+        <h2>Travel</h2>
+        <div class="field"><label class="label" for="sHome">Home postcode</label><input type="text" id="sHome" autocapitalize="characters" autocomplete="off" maxlength="9" placeholder="e.g. CM1 1AA"></div>
+        <div class="row2">
+          <div class="field"><label class="label" for="sTraffic">Traffic allowance (%)</label><input type="number" id="sTraffic" inputmode="numeric" min="0" max="200" step="5"></div>
+          <div class="field"><label class="label" for="sBuffer">Extra minutes</label><input type="number" id="sBuffer" inputmode="numeric" min="0" max="120" step="5"></div>
+        </div>
+        <p class="hint">Used to work out when to leave for each job. The drive time comes from free map services (postcodes.io and OSRM), so your home postcode and each job's postcode are sent to them. Normal driving time is increased by the allowance and the extra minutes, because the free service does not know about live traffic. Use the Directions buttons for live traffic.</p>
+      </div>
+      <div class="card">
         <h2>Send from Gmail</h2>
         <div class="field"><label class="label" for="sClient">Google sign-in code (Client ID)</label><input type="text" id="sClient" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Ends in .apps.googleusercontent.com"></div>
         <p class="hint">Needed once so the app can send email from your Gmail. Until you add it, use Share to Mail or Outlook when you send.</p>
@@ -489,7 +550,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 
       <div class="card">
         <h2>Back up your hours</h2>
-        <p class="hint">Your hours live on this phone. A backup saves your days, pay settings and payslips to a file you keep (save it to Files or iCloud Drive). Do this every few weeks. Restoring puts those days back; days in the file replace the same days here and all other days stay.</p>
+        <p class="hint">Your hours live on this phone. A backup saves your days, schedule, pay settings and payslips to a file you keep (save it to Files or iCloud Drive). Do this every few weeks. Restoring puts those days back; days in the file replace the same days here and all other days stay.</p>
         <p class="hint" id="backupInfo"></p>
         <button class="btn ghost" id="backupBtn">Save backup file</button>
         <button class="btn ghost" id="backupMail">Email me a backup</button>
@@ -504,6 +565,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   <div class="inner" role="tablist">
     <button class="tab" role="tab" data-view="day" aria-selected="true">Day</button>
     <button class="tab" role="tab" data-view="week" aria-selected="false">Week</button>
+    <button class="tab" role="tab" data-view="sched" aria-selected="false">Schedule</button>
     <button class="tab" role="tab" data-view="month" aria-selected="false">Month</button>
     <button class="tab" role="tab" data-view="pay" aria-selected="false">Pay</button>
     <button class="tab" role="tab" data-view="setup" aria-selected="false">Setup</button>
@@ -535,6 +597,17 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         </div>
       </details>
     </div>
+  </div>
+</div>
+
+<div class="sheet" id="impSheet" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+    <div class="head"><h2 id="impTitle">Import schedule</h2><button class="iconbtn" id="impClose" aria-label="Close" style="min-width:48px">&times;</button></div>
+    <div class="field"><label class="label" for="impText">Paste the schedule email here</label><textarea id="impText" rows="8" spellcheck="false" autocomplete="off"></textarea></div>
+    <div class="status" id="impPrev" aria-live="polite"></div>
+    <p class="hint warnline" id="impWarn"></p>
+    <button class="btn" id="impSave" disabled>Save schedule</button>
+    <p class="hint">Importing replaces any schedule already saved for the same dates.</p>
   </div>
 </div>
 
@@ -574,7 +647,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     return Math.max(0, span - (Number(e.brk) || 0));
   }
 
-  var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2 };
+  var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2, homePostcode: '', trafficPct: 20, bufferMins: 10 };
   var PAYFIX = { taxCode: '509L', pensionPct: 4, pensionQual: true, pensionPre: false, sickPay: 24.65, payModel: 2 };
   var DEFAULT_CLIENT = '437915088090-7sravt763njs7of5pcm3kked3ollu4c5.apps.googleusercontent.com';
   var clientId = function () { return String(settings.gClientId || DEFAULT_CLIENT).trim(); };
@@ -584,6 +657,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   var entries = {};
   var sends = {};
   var payslips = {};
+  var schedule = {};
   var formTouched = false;
   var ctx = 'week';
   var selDate = iso(new Date());
@@ -598,6 +672,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     entries = lsGet('hourslog:entries', {});
     sends = lsGet('hourslog:sends', {});
     payslips = lsGet('hourslog:payslips', {});
+    schedule = lsGet('hourslog:schedule', {});
     settings = Object.assign({}, settings, lsGet('hourslog:settings', {}));
     mode = 'local';
     onData();
@@ -609,6 +684,8 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     renderWeek();
     renderMonth();
     renderPay();
+    renderSched();
+    renderDaySched();
     $('#who').textContent = settings.name || '';
     showSync();
     $('#storeNote').textContent = 'Your hours are saved on this phone and work with no signal. Back them up in the section below every few weeks.';
@@ -643,9 +720,10 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 
   /* ---------- tabs ---------- */
   function setView(v) {
-    ['day', 'week', 'month', 'pay', 'setup'].forEach(function (n) { $('#view-' + n).hidden = n !== v; });
+    ['day', 'week', 'sched', 'month', 'pay', 'setup'].forEach(function (n) { $('#view-' + n).hidden = n !== v; });
     document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.view === v ? 'true' : 'false'); });
     if (v === 'week') renderWeek();
+    if (v === 'sched') renderSched();
     if (v === 'month') renderMonth();
     if (v === 'pay') renderPay();
     window.scrollTo(0, 0);
@@ -700,6 +778,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     $('#clockMsg').textContent = running ? 'Working since ' + e.start + '.'
       : done ? 'Today: ' + e.start + '–' + e.end + ', ' + fmtHM(worked(e)) + ' worked.'
       : 'Not started today.';
+    renderDue();
   }
   async function clockStart() {
     var today = iso(new Date()), e = entries[today];
@@ -761,6 +840,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     updateReadout();
     updateStatus();
     updateClock();
+    renderDaySched();
   }
   function setType(t) {
     $('#dtype').value = t || '';
@@ -925,6 +1005,306 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   }
   $('#prevWeek').addEventListener('click', function () { weekStart = addDays(weekStart, -7); renderWeek(); });
   $('#nextWeek').addEventListener('click', function () { weekStart = addDays(weekStart, 7); renderWeek(); });
+
+  /* ---------- schedule ---------- */
+  var DOWS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  var DATE_RE = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\.?,?\s+(\d{4})\s*$/i;
+  var STOP_RE = /^(\d{1,2}):(\d{2})\s*(?:\(([^)]*)\))?\s*(.*)$/;
+  var PC_LINE = /^(.*?)(?:^|\s)([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$/i;
+  function normPC(p) { var t = String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t.length > 3 ? t.slice(0, -3) + ' ' + t.slice(-3) : t; }
+  function mk(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+  function putSchedule() { return lsSet('hourslog:schedule', schedule); }
+
+  function parseSchedule(text) {
+    var lines = String(text || '').replace(/\r/g, '').replace(/[‘’]/g, "'").replace(/ /g, ' ').split('\n');
+    var days = {}, warn = [], cur = null, curDate = '', stage = 0, nStops = 0;
+    function finish() {
+      if (cur && !cur.pc) warn.push('No postcode found for the ' + cur.time + ' stop on ' + longDate(parseISO(curDate)) + '.');
+      cur = null;
+    }
+    lines.forEach(function (raw) {
+      var L = raw.replace(/\s+/g, ' ').trim();
+      if (!L) return;
+      var m = DATE_RE.exec(L);
+      if (m) {
+        finish();
+        var mi = MONTHS.map(function (x) { return x.toLowerCase(); }).indexOf(m[3].slice(0, 3).toLowerCase());
+        if (mi < 0) { warn.push('Could not read the date "' + L + '".'); curDate = ''; return; }
+        var dt = new Date(Number(m[4]), mi, Number(m[2]));
+        if (dt.getDay() !== DOWS[m[1].slice(0, 3).toLowerCase()]) warn.push('"' + L + '" does not match the calendar (that date is a ' + dayName(dt) + ').');
+        curDate = iso(dt); days[curDate] = days[curDate] || []; stage = 0;
+        return;
+      }
+      m = STOP_RE.exec(L);
+      if (m) {
+        if (!curDate) { warn.push('A stop at ' + m[1] + ':' + m[2] + ' came before any date and was skipped.'); return; }
+        finish();
+        cur = { time: pad(Number(m[1])) + ':' + m[2], id: (m[3] || '').trim().slice(0, 20), note: (m[4] || '').trim().slice(0, 160), lines: [], pc: '', contact: '' };
+        days[curDate].push(cur); nStops++; stage = 1;
+        return;
+      }
+      if (!cur) return;
+      if (stage === 1) {
+        var pm = PC_LINE.exec(L);
+        if (pm) {
+          cur.pc = (pm[2] + ' ' + pm[3]).toUpperCase();
+          if (pm[1].trim()) cur.lines.push(pm[1].trim().slice(0, 100));
+          stage = 2;
+        } else if (cur.lines.length < 8) cur.lines.push(L.slice(0, 100));
+      } else if (stage === 2) { cur.contact = L.slice(0, 80); stage = 3; }
+      else { cur.note = (cur.note ? cur.note + '; ' : '') + L.slice(0, 120); cur.note = cur.note.slice(0, 160); }
+    });
+    finish();
+    Object.keys(days).forEach(function (d) { days[d].sort(function (a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; }); });
+    return { days: days, stops: nStops, warn: warn };
+  }
+
+  function cleanStops(arr) {
+    if (!Array.isArray(arr)) return [];
+    var out = [];
+    arr.slice(0, 20).forEach(function (r) {
+      if (!r || !/^\d{2}:\d{2}$/.test(r.time || '')) return;
+      out.push({
+        time: r.time, id: String(r.id || '').slice(0, 20), note: String(r.note || '').slice(0, 160),
+        lines: (Array.isArray(r.lines) ? r.lines : []).slice(0, 8).map(function (x) { return String(x).slice(0, 100); }),
+        pc: normPC(r.pc).slice(0, 9), contact: String(r.contact || '').slice(0, 80)
+      });
+    });
+    return out;
+  }
+  function restoreSchedule(src) {
+    if (!src || typeof src !== 'object') return 0;
+    var n = 0;
+    Object.keys(src).forEach(function (d) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+      var st = cleanStops(src[d]);
+      if (st.length) { schedule[d] = st; n++; }
+    });
+    putSchedule();
+    return n;
+  }
+
+  function mapQuery(s) { return (s.lines[0] ? s.lines[0] + ', ' : '') + s.pc; }
+  function stopEl(s, withDir) {
+    var d = mk('div', 'stop');
+    var h = mk('div', 'stoph');
+    h.appendChild(mk('span', 'stopt', s.time));
+    if (s.id) h.appendChild(mk('span', 'stopid', 'Job ' + s.id));
+    if (s.note) h.appendChild(mk('span', 'stopnote', s.note));
+    d.appendChild(h);
+    if (s.lines.length || s.pc) d.appendChild(mk('div', 'stoplines', s.lines.concat(s.pc ? [s.pc] : []).join(', ')));
+    if (s.contact) d.appendChild(mk('div', 'stopwho', 'Contact: ' + s.contact));
+    if (withDir) {
+      d.appendChild(mk('div', 'stoptravel'));
+      if (s.pc) {
+        var b = mk('div', 'stopbtns');
+        var q = encodeURIComponent(mapQuery(s));
+        var g = mk('a', '', 'Google Maps'); g.href = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + q; g.target = '_blank'; g.rel = 'noopener';
+        var a = mk('a', '', 'Apple Maps'); a.href = 'https://maps.apple.com/?dirflg=d&daddr=' + q; a.target = '_blank'; a.rel = 'noopener';
+        b.appendChild(g); b.appendChild(a); d.appendChild(b);
+      }
+    }
+    return d;
+  }
+  var stopsOn = function (d) { return Array.isArray(schedule[d]) ? schedule[d] : []; };
+
+  /* --- Schedule tab --- */
+  var schedWeek = mondayOf(new Date());
+  function loggedText(d) {
+    var e = entries[d];
+    if (!e) return null;
+    if (e.type) return TYPES[e.type];
+    return e.end ? e.start + '–' + e.end : 'Started ' + e.start;
+  }
+  function renderSched() {
+    if (!$('#schedDays')) return;
+    $('#schedLabel').textContent = shortDate(schedWeek) + ' – ' + shortDate(addDays(schedWeek, 4)) + ' ' + addDays(schedWeek, 4).getFullYear();
+    var box = $('#schedDays'); box.innerHTML = '';
+    var any = false, today = iso(new Date());
+    for (var i = 0; i < 7; i++) {
+      var dt = addDays(schedWeek, i), k = iso(dt), st = stopsOn(k);
+      if (!st.length) continue;
+      any = true;
+      var card = mk('div', 'card daycard');
+      var head = mk('div', 'dh');
+      head.appendChild(mk('b', '', longDate(dt)));
+      var lg = loggedText(k);
+      var pill = mk('span', 'pill', lg ? 'Logged ' + lg : (k <= today ? 'Not logged' : 'Upcoming'));
+      head.appendChild(pill);
+      (function (kk) { head.addEventListener('click', function () { selDate = kk; loadForm(); setView('day'); }); })(k);
+      card.appendChild(head);
+      st.forEach(function (s) { card.appendChild(stopEl(s, false)); });
+      box.appendChild(card);
+    }
+    $('#schedEmpty').hidden = any;
+    $('#schedClear').hidden = !any;
+    renderSearch();
+  }
+  $('#prevSched').addEventListener('click', function () { schedWeek = addDays(schedWeek, -7); renderSched(); });
+  $('#nextSched').addEventListener('click', function () { schedWeek = addDays(schedWeek, 7); renderSched(); });
+  $('#schedClear').addEventListener('click', function () {
+    if (!window.confirm('Remove the saved schedule for this week?')) return;
+    for (var i = 0; i < 7; i++) delete schedule[iso(addDays(schedWeek, i))];
+    putSchedule(); renderSched(); renderDaySched(); renderDue(); toast('Schedule removed');
+  });
+
+  /* --- search past schedules --- */
+  function renderSearch() {
+    var q = ($('#schedQ').value || '').trim().toLowerCase(), box = $('#schedResults'); box.innerHTML = '';
+    var total = Object.keys(schedule).length;
+    if (q.length < 2) { $('#schedCount').textContent = total ? total + (total === 1 ? ' day' : ' days') + ' of schedule saved. Type at least 2 letters to search.' : 'Nothing saved yet.'; return; }
+    var hits = [];
+    Object.keys(schedule).sort().reverse().forEach(function (d) {
+      var dl = longDate(parseISO(d)).toLowerCase();
+      stopsOn(d).forEach(function (s) {
+        var hay = [dl, s.time, s.id, s.note, s.lines.join(' '), s.pc, s.contact].join(' ').toLowerCase();
+        if (hay.indexOf(q) >= 0) hits.push({ d: d, s: s });
+      });
+    });
+    var shown = hits.slice(0, 40);
+    shown.forEach(function (h) {
+      var wrap = mk('div', 'daycard');
+      var head = mk('div', 'dh'); head.appendChild(mk('b', '', longDate(parseISO(h.d))));
+      var lg = loggedText(h.d); if (lg) head.appendChild(mk('span', 'pill', lg));
+      head.addEventListener('click', function () { selDate = h.d; loadForm(); setView('day'); });
+      wrap.appendChild(head); wrap.appendChild(stopEl(h.s, false)); box.appendChild(wrap);
+    });
+    $('#schedCount').textContent = hits.length ? (hits.length > shown.length ? 'Showing ' + shown.length + ' of ' + hits.length + ' matches.' : hits.length + (hits.length === 1 ? ' match.' : ' matches.')) : 'No matches.';
+  }
+  $('#schedQ').addEventListener('input', renderSearch);
+
+  /* --- import sheet --- */
+  var impParsed = null;
+  function impCheck() {
+    var txt = $('#impText').value;
+    if (!txt.trim()) { impParsed = null; $('#impPrev').textContent = ''; $('#impWarn').textContent = ''; $('#impSave').disabled = true; return; }
+    var r = parseSchedule(txt); impParsed = r;
+    var dates = Object.keys(r.days).filter(function (d) { return r.days[d].length; }).sort();
+    var replaced = dates.filter(function (d) { return stopsOn(d).length; }).length;
+    $('#impPrev').textContent = r.stops ? 'Found ' + r.stops + (r.stops === 1 ? ' stop' : ' stops') + ' over ' + dates.length + (dates.length === 1 ? ' day' : ' days') + ' (' + shortDate(parseISO(dates[0])) + ' – ' + shortDate(parseISO(dates[dates.length - 1])) + ')' + (replaced ? '. ' + replaced + (replaced === 1 ? ' day' : ' days') + ' already saved will be replaced.' : '.') : 'No stops found yet. Paste the whole email, with the date lines and the times.';
+    $('#impWarn').textContent = r.warn.slice(0, 4).join(' ');
+    $('#impSave').disabled = !r.stops;
+  }
+  $('#impText').addEventListener('input', impCheck);
+  $('#schedImport').addEventListener('click', function () { $('#impText').value = ''; impCheck(); $('#impSheet').hidden = false; });
+  $('#impClose').addEventListener('click', function () { $('#impSheet').hidden = true; });
+  $('#impSave').addEventListener('click', function () {
+    if (!impParsed || !impParsed.stops) return;
+    var first = '';
+    Object.keys(impParsed.days).sort().forEach(function (d) {
+      var st = impParsed.days[d];
+      if (st.length) { schedule[d] = st; if (!first) first = d; } else delete schedule[d];
+    });
+    if (!putSchedule()) { toast('Could not save. Try again.'); return; }
+    $('#impSheet').hidden = true;
+    if (first) schedWeek = mondayOf(parseISO(first));
+    renderSched(); renderDaySched(); renderDue();
+    toast('Schedule saved');
+  });
+
+  /* --- reminder: scheduled days with no hours logged --- */
+  function renderDue() {
+    var card = $('#dueCard'); if (!card) return;
+    var today = iso(new Date()), todayStops = stopsOn(today), missed = [];
+    for (var i = 1; i <= 14; i++) { var k = iso(addDays(new Date(), -i)); if (stopsOn(k).length && !entries[k]) missed.push(k); }
+    var needToday = todayStops.length && !entries[today];
+    if (!needToday && !missed.length) { card.hidden = true; return; }
+    card.hidden = false;
+    $('#dueText').textContent = (needToday ? 'You are scheduled today (' + todayStops.length + (todayStops.length === 1 ? ' stop' : ' stops') + ', first at ' + todayStops[0].time + ') and have not started logging.' : '') + (needToday && missed.length ? ' ' : '') + (missed.length ? 'Scheduled but no hours logged:' : '');
+    var ch = $('#dueChips'); ch.innerHTML = '';
+    missed.forEach(function (k) {
+      var b = mk('button', 'chip', longDate(parseISO(k))); b.type = 'button';
+      b.addEventListener('click', function () { selDate = k; loadForm(); window.scrollTo(0, 0); });
+      ch.appendChild(b);
+    });
+    $('#dueStart').hidden = !needToday;
+  }
+  $('#dueStart').addEventListener('click', clockStart);
+
+  /* --- travel time --- */
+  var geoCache = lsGet('hourslog:geo', {}), routeCache = lsGet('hourslog:routes', {});
+  async function fetchJSON(url) {
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 12000);
+    try { var r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error('http ' + r.status); return await r.json(); }
+    finally { clearTimeout(t); }
+  }
+  async function geocode(pc) {
+    pc = normPC(pc);
+    if (geoCache[pc]) return geoCache[pc];
+    var j = await fetchJSON('https://api.postcodes.io/postcodes/' + encodeURIComponent(pc));
+    if (!j || !j.result || j.result.latitude == null) throw new Error('postcode ' + pc);
+    var g = { lat: j.result.latitude, lon: j.result.longitude };
+    geoCache[pc] = g; lsSet('hourslog:geo', geoCache);
+    return g;
+  }
+  async function driveMins(a, b) {
+    a = normPC(a); b = normPC(b);
+    var key = a + '>' + b;
+    if (routeCache[key] != null) return routeCache[key];
+    var ga = await geocode(a), gb = await geocode(b);
+    var j = await fetchJSON('https://router.project-osrm.org/route/v1/driving/' + ga.lon + ',' + ga.lat + ';' + gb.lon + ',' + gb.lat + '?overview=false');
+    if (!j || !j.routes || !j.routes[0]) throw new Error('route');
+    var mins = j.routes[0].duration / 60;
+    routeCache[key] = mins; lsSet('hourslog:routes', routeCache);
+    return mins;
+  }
+  var fmtDur = function (m) { m = Math.round(m); return m >= 60 ? Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm' : m + ' min'; };
+  var hhmm = function (m) { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
+
+  var travelToken = 0;
+  function renderDaySched() {
+    var card = $('#daySched'); if (!card) return;
+    var st = stopsOn(selDate);
+    if (!st.length) { card.hidden = true; return; }
+    card.hidden = false;
+    var box = $('#dayStops'); box.innerHTML = '';
+    st.forEach(function (s) { box.appendChild(stopEl(s, true)); });
+    $('#useStart').hidden = true;
+    var hint = $('#travelHint'), home = normPC(settings.homePostcode);
+    if (!home) { hint.textContent = 'Add your home postcode in Setup to see when to leave.'; return; }
+    hint.textContent = 'Working out drive times…';
+    var token = ++travelToken, rows = box.querySelectorAll('.stoptravel');
+    (async function () {
+      var failed = false, firstLeave = null;
+      for (var i = 0; i < st.length; i++) {
+        var s = st[i], from = i === 0 ? home : normPC(st[i - 1].pc), row = rows[i];
+        if (!s.pc) continue;
+        if (from === normPC(s.pc)) { if (token === travelToken) row.textContent = 'Same postcode as ' + (i === 0 ? 'home' : 'the previous stop'); continue; }
+        try {
+          var base = await driveMins(from, s.pc);
+          if (token !== travelToken) return;
+          var pct = settings.trafficPct == null ? 20 : Number(settings.trafficPct) || 0, buf = settings.bufferMins == null ? 10 : Number(settings.bufferMins) || 0;
+          var total = base * (1 + pct / 100) + buf, arrive = toMin(s.time);
+          var leave = Math.floor((arrive - total) / 5) * 5;
+          row.textContent = (i === 0 ? 'From home' : 'From ' + (st[i - 1].lines[0] || 'previous stop')) + ': about ' + fmtDur(base) + ' drive. Leave by ' + hhmm(leave) + ' to arrive on time.';
+          if (i === 0) firstLeave = leave;
+        } catch (err) {
+          failed = true;
+          if (token === travelToken) row.textContent = 'Could not get the drive time' + (navigator.onLine === false ? ' (no signal)' : '') + '.';
+        }
+      }
+      if (token !== travelToken) return;
+      hint.textContent = failed ? 'Drive times need a signal. Times already looked up are remembered.' : 'Estimates use normal driving time plus your traffic allowance and extra minutes (Setup). Travel counts as paid time, so your start time is when you leave.';
+      if (firstLeave != null && firstLeave >= 0) {
+        var q = Math.floor(firstLeave / 15) * 15, v = hhmm(q), b = $('#useStart');
+        b.textContent = 'Use ' + v + ' as start time'; b.dataset.v = v; b.hidden = false;
+      }
+    })();
+  }
+  $('#useStart').addEventListener('click', function () {
+    var v = this.dataset.v; if (!v) return;
+    if ($('#dtype').value) setType('');
+    setT('tStart', v); formTouched = true; updateReadout(); updateStatus();
+    toast('Start set to ' + v + '. Press Save day to keep it.');
+  });
+  $('#useNote').addEventListener('click', function () {
+    var seen = {}, names = [];
+    stopsOn(selDate).forEach(function (s) { var n = s.lines[0]; if (n && !seen[n]) { seen[n] = 1; names.push(n); } });
+    if (!names.length) return;
+    $('#note').value = names.join('; ').slice(0, 120);
+    formTouched = true; updateStatus();
+    toast('Note filled in. Press Save day to keep it.');
+  });
 
   /* ---------- month ---------- */
   var monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -1382,7 +1762,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         try { var b = await idbGet(rec.assetId); if (b) files[rec.assetId] = { type: b.type || rec.contentType, b64: await blobToB64(b) }; } catch (e) {}
       }
     }
-    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files };
+    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule };
   }
   async function markBackedUp() {
     settings.lastBackup = new Date().toISOString();
@@ -1453,8 +1833,9 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         }
         lsSet('hourslog:payslips', payslips);
       }
-      loadForm(); renderWeek(); renderMonth(); renderPay(); showBackup(); showSync();
-      toast('Restored ' + n + (n === 1 ? ' day' : ' days'));
+      var ns = restoreSchedule(data.schedule);
+      loadForm(); renderWeek(); renderMonth(); renderPay(); renderSched(); showBackup(); showSync();
+      toast('Restored ' + n + (n === 1 ? ' day' : ' days') + (ns ? ' and ' + ns + (ns === 1 ? ' scheduled day' : ' scheduled days') : ''));
     } catch (err) { toast('Could not read that file'); }
   });
 
@@ -1479,6 +1860,9 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     $('#sHolDays').value = Number(settings.holDays) > 0 ? settings.holDays : '';
     $('#sHolStart').value = String(Number(settings.holStart) || 1);
     $('#sClient').value = clientId();
+    $('#sHome').value = settings.homePostcode || '';
+    $('#sTraffic').value = settings.trafficPct == null ? 20 : settings.trafficPct;
+    $('#sBuffer').value = settings.bufferMins == null ? 10 : settings.bufferMins;
   }
   $('#saveSetup').addEventListener('click', async function () {
     settings = {
@@ -1501,13 +1885,16 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
       gClientId: $('#sClient').value.trim(),
       holDays: Math.max(0, Number($('#sHolDays').value) || 0),
       holStart: Number($('#sHolStart').value) || 1,
+      homePostcode: normPC($('#sHome').value),
+      trafficPct: $('#sTraffic').value === '' ? 20 : Math.max(0, Math.min(200, Number($('#sTraffic').value) || 0)),
+      bufferMins: $('#sBuffer').value === '' ? 10 : Math.max(0, Math.min(120, Number($('#sBuffer').value) || 0)),
       lastBackup: settings.lastBackup || ''
     };
     try {
       await putSettings();
       $('#who').textContent = settings.name;
       if (!entries[selDate]) loadForm();
-      renderWeek(); renderPay(); updateHol();
+      renderWeek(); renderPay(); updateHol(); renderDaySched();
       toast('Setup saved');
     } catch (err) { toast('Could not save. Try again.'); }
   });
