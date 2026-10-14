@@ -173,7 +173,9 @@ td.t button { font-weight: 600; }
 
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 5; }
 .tabs .inner { display: grid; grid-template-columns: repeat(6, 1fr); width: 100%; max-width: 520px; }
-.tab { background: none; border: 0; border-top: 3px solid transparent; min-height: 60px; font-family: var(--font-display); font-weight: 600; font-size: 0.9375rem; letter-spacing: 0; color: var(--muted); }
+.tab { background: none; border: 0; border-top: 3px solid transparent; min-height: 60px; font-family: var(--font-display); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0; color: var(--muted); }
+.tab { position: relative; }
+.tab.dot::after { content: ""; position: absolute; top: 12px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--night); }
 .tab[aria-selected="true"] { color: var(--accent); border-top-color: var(--accent); }
 
 .sheet { position: fixed; inset: 0; background: var(--scrim); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
@@ -261,13 +263,6 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         </div>
       </div>
 
-      <div class="card duecard" id="dueCard" hidden>
-        <div class="label">Schedule</div>
-        <p id="dueText" style="margin:0"></p>
-        <div class="chips" id="dueChips"></div>
-        <button class="btn" id="dueStart" hidden>Start work</button>
-      </div>
-
       <div class="card">
         <div class="label">Clock</div>
         <div class="clockrow">
@@ -282,16 +277,6 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         <button class="iconbtn" id="prevDay" aria-label="Previous day">&lsaquo;</button>
         <div class="field"><input type="date" id="dayDate" aria-label="Date"></div>
         <button class="iconbtn" id="nextDay" aria-label="Next day">&rsaquo;</button>
-      </div>
-
-      <div class="card" id="daySched" hidden>
-        <div class="label">Scheduled for this day</div>
-        <div id="dayStops"></div>
-        <div class="stack" style="gap:8px">
-          <button class="btn ghost" id="useStart" hidden></button>
-          <button class="btn ghost" id="useNote">Use sites as the day's note</button>
-        </div>
-        <p class="hint" id="travelHint"></p>
       </div>
 
       <div class="card">
@@ -386,7 +371,15 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         <div class="mid"><div class="label">Schedule for week of</div><div id="schedLabel"></div></div>
         <button class="iconbtn" id="nextSched" aria-label="Next week">&rsaquo;</button>
       </div>
+      <div class="card duecard" id="dueCard" hidden>
+        <div class="label">Schedule</div>
+        <p id="dueText" style="margin:0"></p>
+        <div class="chips" id="dueChips"></div>
+        <button class="btn" id="dueStart" hidden>Start work</button>
+      </div>
       <div id="schedDays" class="stack" style="gap:16px"></div>
+      <p class="hint" id="travelHint"></p>
+      <p class="hint" id="schedTap" hidden>Tap a day's heading to open its timesheet.</p>
       <p class="hint" id="schedEmpty" hidden>No schedule saved for this week. Press Import schedule and paste your Friday email.</p>
       <div class="stack">
         <button class="btn" id="schedImport">Import schedule</button>
@@ -565,7 +558,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 
 <nav class="tabs" aria-label="Sections">
   <div class="inner" role="tablist">
-    <button class="tab" role="tab" data-view="day" aria-selected="true">Day</button>
+    <button class="tab" role="tab" data-view="day" aria-selected="true">Timesheet</button>
     <button class="tab" role="tab" data-view="week" aria-selected="false">Week</button>
     <button class="tab" role="tab" data-view="sched" aria-selected="false">Schedule</button>
     <button class="tab" role="tab" data-view="month" aria-selected="false">Month</button>
@@ -689,7 +682,6 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     renderMonth();
     renderPay();
     renderSched();
-    renderDaySched();
     $('#who').textContent = settings.name || '';
     showSync();
     $('#storeNote').textContent = 'Your hours are saved on this phone and work with no signal. Back them up in the section below every few weeks.';
@@ -844,7 +836,6 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     updateReadout();
     updateStatus();
     updateClock();
-    renderDaySched();
   }
   function setType(t) {
     $('#dtype').value = t || '';
@@ -1127,7 +1118,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     if (!$('#schedDays')) return;
     $('#schedLabel').textContent = shortDate(schedWeek) + ' – ' + shortDate(addDays(schedWeek, 4)) + ' ' + addDays(schedWeek, 4).getFullYear();
     var box = $('#schedDays'); box.innerHTML = '';
-    var any = false, today = iso(new Date());
+    var any = false, today = iso(new Date()), days = [], allStops = [];
     for (var i = 0; i < 7; i++) {
       var dt = addDays(schedWeek, i), k = iso(dt), st = stopsOn(k);
       if (!st.length) continue;
@@ -1136,15 +1127,28 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
       var head = mk('div', 'dh');
       head.appendChild(mk('b', '', longDate(dt)));
       var lg = loggedText(k);
-      var pill = mk('span', 'pill', lg ? 'Logged ' + lg : (k <= today ? 'Not logged' : 'Upcoming'));
-      head.appendChild(pill);
+      head.appendChild(mk('span', 'pill', lg ? 'Logged ' + lg : (k <= today ? 'Not logged' : 'Upcoming')));
       (function (kk) { head.addEventListener('click', function () { selDate = kk; loadForm(); setView('day'); }); })(k);
       card.appendChild(head);
-      st.forEach(function (s) { card.appendChild(stopEl(s, false)); });
+      st.forEach(function (s) { card.appendChild(stopEl(s, true)); });
+      var acts = mk('div', 'stack'); acts.style.gap = '8px';
+      var ub = mk('button', 'btn ghost'); ub.type = 'button'; ub.hidden = true;
+      var nb = mk('button', 'btn ghost', 'Use sites as the timesheet note'); nb.type = 'button';
+      (function (kk, u, n) {
+        u.addEventListener('click', function () { useStartFor(kk, u.dataset.v); });
+        n.addEventListener('click', function () { useNoteFor(kk); });
+      })(k, ub, nb);
+      acts.appendChild(ub); acts.appendChild(nb); card.appendChild(acts);
       box.appendChild(card);
+      days.push({ k: k, st: st, card: card, ub: ub });
+      allStops = allStops.concat(st);
     }
     $('#schedEmpty').hidden = any;
+    $('#schedTap').hidden = !any;
     $('#schedClear').hidden = !any;
+    refreshPhones();
+    ensurePhones(allStops);
+    startTravel(days);
     renderSearch();
   }
   $('#prevSched').addEventListener('click', function () { schedWeek = addDays(schedWeek, -7); renderSched(); });
@@ -1152,7 +1156,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   $('#schedClear').addEventListener('click', function () {
     if (!window.confirm('Remove the saved schedule for this week?')) return;
     for (var i = 0; i < 7; i++) delete schedule[iso(addDays(schedWeek, i))];
-    putSchedule(); renderSched(); renderDaySched(); renderDue(); toast('Schedule removed');
+    putSchedule(); renderSched(); renderDue(); toast('Schedule removed');
   });
 
   /* --- search past schedules --- */
@@ -1205,7 +1209,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     if (!putSchedule()) { toast('Could not save. Try again.'); return; }
     $('#impSheet').hidden = true;
     if (first) schedWeek = mondayOf(parseISO(first));
-    renderSched(); renderDaySched(); renderDue();
+    renderSched(); renderDue();
     toast('Schedule saved');
     var all = []; Object.keys(impParsed.days).forEach(function (d) { all = all.concat(impParsed.days[d]); });
     ensurePhones(all);
@@ -1217,13 +1221,15 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     var today = iso(new Date()), todayStops = stopsOn(today), missed = [];
     for (var i = 1; i <= 14; i++) { var k = iso(addDays(new Date(), -i)); if (stopsOn(k).length && !entries[k]) missed.push(k); }
     var needToday = todayStops.length && !entries[today];
-    if (!needToday && !missed.length) { card.hidden = true; return; }
+    var tabEl = document.querySelector('.tab[data-view="sched"]');
+    if (!needToday && !missed.length) { card.hidden = true; if (tabEl) tabEl.classList.remove('dot'); return; }
     card.hidden = false;
+    if (tabEl) tabEl.classList.add('dot');
     $('#dueText').textContent = (needToday ? 'You are scheduled today (' + todayStops.length + (todayStops.length === 1 ? ' stop' : ' stops') + ', first at ' + todayStops[0].time + ') and have not started logging.' : '') + (needToday && missed.length ? ' ' : '') + (missed.length ? 'Scheduled but no hours logged:' : '');
     var ch = $('#dueChips'); ch.innerHTML = '';
     missed.forEach(function (k) {
       var b = mk('button', 'chip', longDate(parseISO(k))); b.type = 'button';
-      b.addEventListener('click', function () { selDate = k; loadForm(); window.scrollTo(0, 0); });
+      b.addEventListener('click', function () { selDate = k; loadForm(); setView('day'); });
       ch.appendChild(b);
     });
     $('#dueStart').hidden = !needToday;
@@ -1287,7 +1293,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
     } finally { phoneBusy = false; refreshPhones(); }
   }
   function refreshPhones() {
-    document.querySelectorAll('#dayStops .stopphone').forEach(function (box) { fillPhone(box, box._stop); });
+    document.querySelectorAll('#schedDays .stopphone').forEach(function (box) { fillPhone(box, box._stop); });
   }
   function fillPhone(box, s) {
     box.innerHTML = '';
@@ -1355,22 +1361,15 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
   var hhmm = function (m) { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
 
   var travelToken = 0;
-  function renderDaySched() {
-    var card = $('#daySched'); if (!card) return;
-    var st = stopsOn(selDate);
-    if (!st.length) { card.hidden = true; return; }
-    card.hidden = false;
-    var box = $('#dayStops'); box.innerHTML = '';
-    st.forEach(function (s) { box.appendChild(stopEl(s, true)); });
-    refreshPhones();
-    ensurePhones(st);
-    $('#useStart').hidden = true;
-    var hint = $('#travelHint'), home = normPC(settings.homePostcode);
+  async function startTravel(days) {
+    var hint = $('#travelHint'), home = normPC(settings.homePostcode), token = ++travelToken, today = iso(new Date());
+    var live = days.filter(function (d) { return d.k >= today; });
+    if (!live.length) { hint.textContent = ''; return; }
     if (!home) { hint.textContent = 'Add your home postcode in Setup to see when to leave.'; return; }
     hint.textContent = 'Working out drive times…';
-    var token = ++travelToken, rows = box.querySelectorAll('.stoptravel');
-    (async function () {
-      var failed = false, firstLeave = null;
+    var failed = false;
+    for (var di = 0; di < live.length; di++) {
+      var d = live[di], st = d.st, rows = d.card.querySelectorAll('.stoptravel'), firstLeave = null;
       for (var i = 0; i < st.length; i++) {
         var s = st[i], from = i === 0 ? home : normPC(st[i - 1].pc), row = rows[i];
         if (!s.pc) continue;
@@ -1389,27 +1388,32 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
         }
       }
       if (token !== travelToken) return;
-      hint.textContent = failed ? 'Drive times need a signal. Times already looked up are remembered.' : 'Estimates use normal driving time plus your traffic allowance and extra minutes (Setup). Travel counts as paid time, so your start time is when you leave.';
       if (firstLeave != null && firstLeave >= 0) {
-        var q = Math.floor(firstLeave / 15) * 15, v = hhmm(q), b = $('#useStart');
-        b.textContent = 'Use ' + v + ' as start time'; b.dataset.v = v; b.hidden = false;
+        var v = hhmm(Math.floor(firstLeave / 15) * 15);
+        d.ub.textContent = 'Use ' + v + ' as start time on the timesheet'; d.ub.dataset.v = v; d.ub.hidden = false;
       }
-    })();
+    }
+    if (token !== travelToken) return;
+    hint.textContent = failed ? 'Drive times need a signal. Times already looked up are remembered.' : 'Estimates use normal driving time plus your traffic allowance and extra minutes (Setup). Travel counts as paid time, so your start time is when you leave.';
   }
-  $('#useStart').addEventListener('click', function () {
-    var v = this.dataset.v; if (!v) return;
+  function useStartFor(k, v) {
+    if (!v) return;
+    selDate = k; loadForm();
     if ($('#dtype').value) setType('');
     setT('tStart', v); formTouched = true; updateReadout(); updateStatus();
+    setView('day');
     toast('Start set to ' + v + '. Press Save day to keep it.');
-  });
-  $('#useNote').addEventListener('click', function () {
+  }
+  function useNoteFor(k) {
     var seen = {}, names = [];
-    stopsOn(selDate).forEach(function (s) { var n = s.lines[0]; if (n && !seen[n]) { seen[n] = 1; names.push(n); } });
+    stopsOn(k).forEach(function (s) { var n = s.lines[0]; if (n && !seen[n]) { seen[n] = 1; names.push(n); } });
     if (!names.length) return;
+    selDate = k; loadForm();
     $('#note').value = names.join('; ').slice(0, 120);
     formTouched = true; updateStatus();
+    setView('day');
     toast('Note filled in. Press Save day to keep it.');
-  });
+  }
 
   /* ---------- month ---------- */
   var monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -2000,7 +2004,7 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
       await putSettings();
       $('#who').textContent = settings.name;
       if (!entries[selDate]) loadForm();
-      renderWeek(); renderPay(); updateHol(); renderDaySched();
+      renderWeek(); renderPay(); updateHol(); renderSched();
       toast('Setup saved');
     } catch (err) { toast('Could not save. Try again.'); }
   });
