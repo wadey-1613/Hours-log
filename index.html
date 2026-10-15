@@ -1482,8 +1482,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         var b = mk('div', 'stopbtns');
         var q = encodeURIComponent(mapQuery(s));
         var g = mk('a', '', 'Google Maps'); g.href = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + q; g.target = '_blank'; g.rel = 'noopener';
-        var a = mk('a', '', 'Apple Maps'); a.href = 'https://maps.apple.com/?dirflg=d&daddr=' + q; a.target = '_blank'; a.rel = 'noopener';
-        b.appendChild(g); b.appendChild(a); d.appendChild(b);
+        b.appendChild(g); d.appendChild(b);
       }
     }
     return d;
@@ -2376,12 +2375,11 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (s.pc) {
       var q = encodeURIComponent(mapQuery(s));
       var g = mk('a', 'btn full', 'Open in Google Maps'); g.href = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + q; g.target = '_blank'; g.rel = 'noopener'; b.appendChild(g);
-      var a2 = mk('a', 'btn ghost', 'Apple Maps'); a2.href = 'https://maps.apple.com/?dirflg=d&daddr=' + q; a2.target = '_blank'; a2.rel = 'noopener'; b.appendChild(a2);
       var ph = phones[normPC(s.pc)];
       if (ph && ph.num) { var c = mk('a', 'btn ghost', 'Call'); c.href = 'tel:' + ph.num.replace(/[^\d+]/g, ''); b.appendChild(c); }
       else { ensurePhones([s]).then(function () { var p2 = phones[normPC(s.pc)]; if (p2 && p2.num && currentView === 'home' && token === homeToken) renderHome(); }); }
     }
-    var sc = mk('button', 'btn ghost', "Today's schedule"); sc.type = 'button'; sc.addEventListener('click', function () { schedDay = iso(now); setView('sched'); }); b.appendChild(sc);
+    var sc = mk('button', 'btn ghost' + (b.querySelector('a:not(.full)') ? '' : ' full'), "Today's schedule"); sc.type = 'button'; sc.addEventListener('click', function () { schedDay = iso(now); setView('sched'); }); b.appendChild(sc);
     card.appendChild(b);
   }
 
