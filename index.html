@@ -390,6 +390,17 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 .jobcard .jbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .jobcard .jbtns .full { grid-column: 1 / -1; }
 .jobcard .jbtns .btn { min-height: 48px; font-size: 0.9375rem; }
+.hreq { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.hreq:first-child { border-top: 0; }
+.hreq .rh { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.hreq .rh b { font-family: var(--font-display); font-size: 1.0625rem; }
+.hreq .rs { color: var(--muted); font-size: 0.8125rem; }
+.hreq .rb { display: flex; gap: 8px; flex-wrap: wrap; }
+.hreq .rb button { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 0; font-weight: 650; font-size: 0.875rem; background: var(--accent-soft); color: var(--accent); }
+.hreq .rb button.ok { background: var(--accent); color: var(--accent-ink); }
+.hreq .rb button.no { background: transparent; border: 1px solid var(--line); color: var(--danger); }
+.cal .c.req { border: 1px dashed var(--night); }
+.cal .c.req .v { color: var(--night); }
 </style>
 
 <body>
@@ -663,14 +674,18 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
           <div><div class="label">Booked ahead</div><div class="mid2" id="holBooked">0</div></div>
           <div><div class="label">Left</div><div class="mid2" id="holLeft">–</div></div>
         </div>
+        <div id="holReqs"></div>
         <div id="holList"></div>
-        <div class="label">Book holiday</div>
+        <details class="more" id="holPastBox" hidden><summary>Past requests</summary><div id="holPast"></div></details>
+        <div class="label">Request holiday</div>
         <div class="row2">
           <div class="field"><label class="label" for="hbFrom">First day</label><input type="date" id="hbFrom"></div>
           <div class="field"><label class="label" for="hbTo">Last day</label><input type="date" id="hbTo"></div>
         </div>
-        <button class="btn" id="hbBook">Book holiday</button>
-        <p class="hint">Weekends are skipped. You will be warned if a day already has scheduled jobs or something logged, or if it takes you over your allowance. Tap a booked holiday above to cancel it.</p>
+        <div class="field"><label class="label" for="hbNote">Note for the request (optional)</label><input type="text" id="hbNote" maxlength="200" placeholder="e.g. family wedding"></div>
+        <button class="btn" id="hbRequest">Request holiday by email</button>
+        <button class="btn ghost" id="hbBook">Book without asking</button>
+        <p class="hint">Request emails the people set in Setup and keeps the request as waiting until you mark it approved or declined. Approved days are booked as holiday. Book without asking books the days straight away. Weekends are skipped, and you are warned about scheduled jobs, logged days and your allowance. Tap a booked holiday above to cancel it.</p>
       </div>
     </section>
 
@@ -692,6 +707,14 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
           <label class="label" for="sOffice">Office email addresses</label>
           <textarea id="sOffice" placeholder="One per line"></textarea>
           <p class="hint">Everyone listed here, plus you, is addressed when you press Email timesheet.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Holiday requests</h2>
+        <div class="field">
+          <label class="label" for="sHolTo">Who gets holiday requests</label>
+          <textarea id="sHolTo" placeholder="One per line"></textarea>
+          <p class="hint">Request holiday on the Pay tab emails everyone listed here, plus you. Replies do not come back to the app, so mark each request as approved or declined yourself when you hear back.</p>
         </div>
       </div>
       <div class="card">
@@ -901,6 +924,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   var payslips = {};
   var schedule = {};
   var phones = {};
+  var holreq = {};
   var formTouched = false;
   var ctx = 'week';
   var selDate = iso(new Date());
@@ -917,6 +941,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     payslips = lsGet('hourslog:payslips', {});
     schedule = lsGet('hourslog:schedule', {});
     phones = lsGet('hourslog:phones', {});
+    holreq = lsGet('hourslog:holreq', {});
     settings = Object.assign({}, settings, lsGet('hourslog:settings', {}));
     ensureEstimates();
     mode = 'local';
@@ -1892,7 +1917,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     box.innerHTML = '';
     DAYS.forEach(function (d) { box.appendChild(mk('div', 'dh', d.slice(0, 2))); });
     var first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1), last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-    var end = addDays(mondayOf(last), 6), today = iso(new Date()), LV = { holiday: 'Hol', bank: 'Bank', sick: 'Sick' };
+    var end = addDays(mondayOf(last), 6), today = iso(new Date()), LV = { holiday: 'Hol', bank: 'Bank', sick: 'Sick' }, pend = pendingDays();
     for (var d = mondayOf(first); d <= end; d = addDays(d, 1)) {
       var k = iso(d), e = entries[k], dow = (d.getDay() + 6) % 7;
       var cls = 'c' + (d.getMonth() === first.getMonth() ? '' : ' out') + (dow > 4 ? ' we' : '') + (k === today ? ' today' : '');
@@ -1902,6 +1927,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         else if (e.est) { cls += ' est'; v = 'est'; }
         else { cls += ' log'; v = e.end ? fmtHM(worked(e)) : '…'; }
       }
+      if (!e && pend[k]) { cls += ' req'; v = 'req'; }
       if (stopsOn(k).length && !realEntry(k)) cls += ' sched';
       var b = mk('button', cls); b.type = 'button';
       b.setAttribute('aria-label', longDate(d) + (v ? ', ' + v : ''));
@@ -2058,11 +2084,156 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     var allow = Number(settings.holDays) || 0;
     return { taken: taken, booked: list.length, list: list, allow: allow, left: allow ? allow - taken - list.length : null };
   }
+  /* ---------- holiday requests ---------- */
+  function putHolreq() { return lsSet('hourslog:holreq', holreq); }
+  function restoreHolreq(src) {
+    if (!src || typeof src !== 'object') return;
+    var okD = function (x) { return /^\d{4}-\d{2}-\d{2}$/.test(x || ''); };
+    Object.keys(src).forEach(function (k) {
+      var r = src[k];
+      if (!r || typeof r !== 'object' || !okD(r.from) || !okD(r.to) || !Array.isArray(r.days)) return;
+      var id = String(r.id || k).replace(/[^A-Za-z0-9]/g, '').slice(0, 20); if (!id) return;
+      holreq[id] = { id: id, from: r.from, to: r.to, days: r.days.filter(okD).slice(0, 60), note: String(r.note || '').slice(0, 200),
+        status: r.status === 'approved' || r.status === 'declined' ? r.status : 'pending', sentAt: String(r.sentAt || '').slice(0, 30), decidedAt: String(r.decidedAt || '').slice(0, 30),
+        sentTo: (Array.isArray(r.sentTo) ? r.sentTo : []).slice(0, 10).map(function (x) { return String(x).slice(0, 100); }) };
+    });
+    putHolreq();
+  }
+  function holToList() {
+    var seen = {}, out = [];
+    (settings.holTo || '').split(/[\s,;]+/).forEach(function (a) { a = a.trim(); if (a.indexOf('@') > 0 && !seen[a.toLowerCase()]) { seen[a.toLowerCase()] = 1; out.push(a); } });
+    return out;
+  }
+  function holEmailTo() {
+    var to = holToList(), me = (settings.me || '').trim();
+    if (me.indexOf('@') > 0 && to.map(function (x) { return x.toLowerCase(); }).indexOf(me.toLowerCase()) < 0) to.push(me);
+    return to;
+  }
+  var pendingDays = function () { var m = {}; Object.keys(holreq).forEach(function (id) { if (holreq[id].status === 'pending') holreq[id].days.forEach(function (d) { m[d] = id; }); }); return m; };
+  function holRange(r) { return r.from === r.to ? longDate(parseISO(r.from)) : longDate(parseISO(r.from)) + ' to ' + longDate(parseISO(r.to)); }
+  function holSubject(r, reminder) { return (reminder ? 'Reminder: ' : '') + 'Holiday request – ' + (settings.name || 'Hours Log') + ' – ' + (r.from === r.to ? shortDate(parseISO(r.from)) : shortDate(parseISO(r.from)) + ' to ' + shortDate(parseISO(r.to))) + ' ' + parseISO(r.to).getFullYear(); }
+  function holBody(r, reminder) {
+    var L = ['Hello,', '', (reminder ? 'This is a reminder of my holiday request:' : 'I would like to request holiday:'), '',
+      'From: ' + longDate(parseISO(r.from)), 'To: ' + longDate(parseISO(r.to)),
+      'Working days: ' + r.days.length + ' (' + r.days.map(function (d) { return shortDate(parseISO(d)); }).join(', ') + ')'];
+    if (r.note) L.push('Note: ' + r.note);
+    L.push('', 'Please let me know if this is approved.', '', 'Thank you', settings.name || '');
+    return L.join('\n');
+  }
+  function holHtml(r, reminder) {
+    var rows = [['From', longDate(parseISO(r.from))], ['To', longDate(parseISO(r.to))], ['Working days', r.days.length + ' (' + r.days.map(function (d) { return shortDate(parseISO(d)); }).join(', ') + ')']];
+    if (r.note) rows.push(['Note', r.note]);
+    return '<div style="font-family:Arial,Helvetica,sans-serif;color:#16212b;font-size:15px;line-height:1.5"><p>Hello,</p><p>' + (reminder ? 'This is a reminder of my holiday request:' : 'I would like to request holiday:') + '</p><table style="border-collapse:collapse">' +
+      rows.map(function (x) { return '<tr><td style="padding:4px 14px 4px 0;color:#566676">' + esc(x[0]) + '</td><td style="padding:4px 0;font-weight:600">' + esc(x[1]) + '</td></tr>'; }).join('') +
+      '</table><p>Please let me know if this is approved.</p><p>Thank you<br>' + esc(settings.name || '') + '</p></div>';
+  }
+  function holWeekdays(f, t) {
+    var days = [];
+    for (var d = parseISO(f); iso(d) <= t && days.length < 60; d = addDays(d, 1)) if ((d.getDay() + 6) % 7 < 5) days.push(iso(d));
+    return days;
+  }
+  function holEntry(k) { return { date: k, type: 'holiday', start: '', end: '', brk: 0, night: false, note: '', mins: 0 }; }
+  function holWarnings(fresh) {
+    var msgs = [], st = holStats();
+    var jobs = fresh.filter(function (k) { return stopsOn(k).length; });
+    var over = fresh.filter(function (k) { return entries[k]; });
+    var pend = pendingDays(), dup = fresh.filter(function (k) { return pend[k]; });
+    if (jobs.length) msgs.push(jobs.length + (jobs.length === 1 ? ' day has' : ' days have') + ' scheduled jobs: ' + jobs.slice(0, 4).map(function (k) { return shortDate(parseISO(k)); }).join(', ') + (jobs.length > 4 ? '…' : '') + '.');
+    if (over.length) msgs.push(over.length + (over.length === 1 ? ' day already has' : ' days already have') + ' something logged' + ' (it would be replaced if approved).');
+    if (dup.length) msgs.push(dup.length + (dup.length === 1 ? ' day is' : ' days are') + ' already in a request waiting for a reply.');
+    if (st.allow && st.taken + st.booked + fresh.length > st.allow) msgs.push('This takes you ' + (st.taken + st.booked + fresh.length - st.allow) + ' over your allowance of ' + st.allow + ' days.');
+    return msgs;
+  }
+  function holRefresh() { renderHoliday(); renderHome(); renderWeek(); renderMonth(); loadForm(); }
+
+  function reqRow(r) {
+    var box = mk('div', 'hreq'), head = mk('div', 'rh');
+    head.appendChild(mk('b', '', (r.from === r.to ? shortDate(parseISO(r.from)) : shortDate(parseISO(r.from)) + ' – ' + shortDate(parseISO(r.to))) + ' ' + parseISO(r.to).getFullYear()));
+    head.appendChild(mk('span', 'pill', r.status === 'pending' ? 'Waiting' : r.status === 'approved' ? 'Approved' : 'Declined'));
+    box.appendChild(head);
+    var sent = r.sentAt ? new Date(r.sentAt) : null;
+    box.appendChild(mk('div', 'rs', r.days.length + (r.days.length === 1 ? ' day' : ' days') + (sent ? ' · sent ' + sent.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '') + (r.sentTo && r.sentTo.length ? ' to ' + r.sentTo.join(', ') : '') + (r.note ? ' · ' + r.note : '')));
+    var rb = mk('div', 'rb');
+    function btn(label, cls, fn) { var b = mk('button', cls, label); b.type = 'button'; b.addEventListener('click', function () { fn(b); }); rb.appendChild(b); }
+    if (r.status === 'pending') {
+      btn('Approved', 'ok', function () { approveReq(r); });
+      btn('Declined', 'no', function () { declineReq(r); });
+      btn('Resend', '', function (b) { resendReq(r, b); });
+    } else btn('Remove from list', 'no', function () { if (window.confirm('Remove this request from the list? ' + (r.status === 'approved' ? 'Booked holiday days stay in your calendar.' : ''))) { delete holreq[r.id]; putHolreq(); renderHoliday(); renderHome(); renderMonth(); } });
+    box.appendChild(rb);
+    return box;
+  }
+  async function approveReq(r) {
+    var over = r.days.filter(function (k) { return entries[k] && entries[k].type !== 'holiday'; });
+    if (over.length && !window.confirm(over.length + (over.length === 1 ? ' day already has' : ' days already have') + ' something logged and will be replaced by holiday. Mark as approved anyway?')) return;
+    try {
+      for (var i = 0; i < r.days.length; i++) if (!(entries[r.days[i]] && entries[r.days[i]].type === 'holiday')) await putEntry(holEntry(r.days[i]));
+    } catch (err) { toast('Could not save. Try again.'); return; }
+    r.status = 'approved'; r.decidedAt = new Date().toISOString(); putHolreq();
+    holRefresh(); toast('Approved: ' + r.days.length + (r.days.length === 1 ? ' day' : ' days') + ' booked as holiday');
+  }
+  function declineReq(r) {
+    if (!window.confirm('Mark this request as declined? The days are not booked.')) return;
+    r.status = 'declined'; r.decidedAt = new Date().toISOString(); putHolreq();
+    holRefresh(); toast('Marked as declined');
+  }
+  async function resendReq(r, btn) {
+    var to = holEmailTo();
+    if (!holToList().length) { toast('Add who gets holiday requests in Setup first'); return; }
+    if (!window.confirm('Send this request again to ' + holToList().join(', ') + '?')) return;
+    btn.disabled = true;
+    try {
+      await gmailSend({ to: to, subject: holSubject(r, true), text: holBody(r, true), html: holHtml(r, true) });
+      r.sentAt = new Date().toISOString(); putHolreq(); renderHoliday(); toast('Reminder sent');
+    } catch (err) { toast(gErrMsg(err)); }
+    finally { btn.disabled = false; }
+  }
+  function mailtoFor(r) {
+    return 'mailto:' + holEmailTo().map(encodeURIComponent).join(',') + '?subject=' + encodeURIComponent(holSubject(r)) + '&body=' + encodeURIComponent(holBody(r)).replace(/%0A/g, '%0D%0A');
+  }
+  $('#hbRequest').addEventListener('click', async function () {
+    var btn = this, f = $('#hbFrom').value, t = $('#hbTo').value || f, note = $('#hbNote').value.trim();
+    if (!f) { toast('Pick the first day'); return; }
+    if (t < f) { toast('The last day is before the first day'); return; }
+    var days = holWeekdays(f, t);
+    if (!days.length) { toast('Those days are all weekend'); return; }
+    var fresh = days.filter(function (k) { return !(entries[k] && entries[k].type === 'holiday'); });
+    if (!fresh.length) { toast('Already booked'); return; }
+    if (!holToList().length) { toast('Add who gets holiday requests in Setup first'); setView('setup'); return; }
+    var r = { id: 'h' + Date.now().toString(36), from: fresh[0], to: fresh[fresh.length - 1], days: fresh, note: note, status: 'pending', sentAt: new Date().toISOString(), decidedAt: '', sentTo: holToList() };
+    var msgs = holWarnings(fresh);
+    var ask = (msgs.length ? msgs.join('\n') + '\n\n' : '') + 'Send a holiday request for ' + holRange(r) + ' (' + fresh.length + (fresh.length === 1 ? ' working day' : ' working days') + ') to ' + holToList().join(', ') + '?';
+    if (!window.confirm(ask)) return;
+    btn.disabled = true;
+    try {
+      await gmailSend({ to: holEmailTo(), subject: holSubject(r), text: holBody(r), html: holHtml(r) });
+    } catch (err) {
+      btn.disabled = false;
+      if (window.confirm(gErrMsg(err) + '\n\nOpen the request in your mail app instead? It will be saved as waiting for a reply.')) {
+        holreq[r.id] = r; putHolreq(); $('#hbFrom').value = ''; $('#hbTo').value = ''; $('#hbNote').value = ''; holRefresh();
+        window.location.href = mailtoFor(r);
+      }
+      return;
+    }
+    btn.disabled = false;
+    holreq[r.id] = r;
+    if (!putHolreq()) { toast('Sent, but could not save the request here. Keep a note of it.'); return; }
+    $('#hbFrom').value = ''; $('#hbTo').value = ''; $('#hbNote').value = '';
+    holRefresh();
+    toast('Holiday request sent');
+  });
+
   function renderHoliday() {
     if (!$('#holCard')) return;
     var st = holStats();
     $('#holTaken').textContent = st.taken; $('#holBooked').textContent = st.booked;
     $('#holLeft').textContent = st.left == null ? '–' : st.left;
+    var rq = $('#holReqs'); rq.innerHTML = '';
+    var all = Object.keys(holreq).map(function (id) { return holreq[id]; }).sort(function (a, b) { return a.from < b.from ? -1 : 1; });
+    var pending = all.filter(function (r) { return r.status === 'pending'; }), past = all.filter(function (r) { return r.status !== 'pending'; }).reverse().slice(0, 8);
+    if (pending.length) { rq.appendChild(mk('div', 'label', 'Waiting for a reply')); pending.forEach(function (r) { rq.appendChild(reqRow(r)); }); }
+    $('#holPastBox').hidden = !past.length;
+    var pp = $('#holPast'); pp.innerHTML = ''; past.forEach(function (r) { pp.appendChild(reqRow(r)); });
     var box = $('#holList'); box.innerHTML = '';
     var ranges = [];
     st.list.forEach(function (k) {
@@ -2081,29 +2252,23 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         renderHoliday(); renderHome(); renderWeek(); loadForm(); toast('Holiday cancelled');
       }));
     });
-    if (!ranges.length) box.appendChild(mk('p', 'hint', 'No holiday booked ahead.'));
+    if (!ranges.length && !pending.length) box.appendChild(mk('p', 'hint', 'No holiday booked ahead.'));
   }
   $('#hbBook').addEventListener('click', async function () {
     var f = $('#hbFrom').value, t = $('#hbTo').value || f;
     if (!f) { toast('Pick the first day'); return; }
     if (t < f) { toast('The last day is before the first day'); return; }
-    var days = [];
-    for (var d = parseISO(f); iso(d) <= t && days.length < 60; d = addDays(d, 1)) if ((d.getDay() + 6) % 7 < 5) days.push(iso(d));
+    var days = holWeekdays(f, t);
     if (!days.length) { toast('Those days are all weekend'); return; }
     var fresh = days.filter(function (k) { return !(entries[k] && entries[k].type === 'holiday'); });
     if (!fresh.length) { toast('Already booked'); return; }
-    var jobs = fresh.filter(function (k) { return stopsOn(k).length; });
-    var over = fresh.filter(function (k) { return entries[k]; });
-    var msgs = [], st = holStats();
-    if (jobs.length) msgs.push(jobs.length + (jobs.length === 1 ? ' day has' : ' days have') + ' scheduled jobs: ' + jobs.slice(0, 4).map(function (k) { return shortDate(parseISO(k)); }).join(', ') + (jobs.length > 4 ? '…' : '') + '.');
-    if (over.length) msgs.push(over.length + (over.length === 1 ? ' day already has' : ' days already have') + ' something logged and would be replaced.');
-    if (st.allow && st.taken + st.booked + fresh.length > st.allow) msgs.push('This takes you ' + (st.taken + st.booked + fresh.length - st.allow) + ' over your allowance of ' + st.allow + ' days.');
+    var msgs = holWarnings(fresh);
     if (msgs.length && !window.confirm(msgs.join('\n') + '\n\nBook anyway?')) return;
     try {
-      for (var i = 0; i < fresh.length; i++) await putEntry({ date: fresh[i], type: 'holiday', start: '', end: '', brk: 0, night: false, note: '', mins: 0 });
+      for (var i = 0; i < fresh.length; i++) await putEntry(holEntry(fresh[i]));
     } catch (err) { toast('Could not save. Try again.'); return; }
-    $('#hbFrom').value = ''; $('#hbTo').value = '';
-    renderHoliday(); renderHome(); renderWeek(); renderMonth(); loadForm();
+    $('#hbFrom').value = ''; $('#hbTo').value = ''; $('#hbNote').value = '';
+    holRefresh();
     toast('Booked ' + fresh.length + (fresh.length === 1 ? ' day' : ' days'));
   });
   $('#hWeekCard').addEventListener('click', function () { weekStart = mondayOf(new Date()); setView('week'); });
@@ -2429,6 +2594,10 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (prevWorked && !isSent({ mon: iso(prev) })) todo.push({ t: "Last week's timesheet (week of " + shortDate(prev) + ") has not been sent", go: function () { weekStart = prev; setView('week'); } });
     var estDays = Object.keys(entries).filter(function (k) { return entries[k].est; }).sort();
     if (estDays.length) todo.push({ t: estDays.length + (estDays.length === 1 ? ' day is' : ' days are') + ' estimated at 8:00 (last week of the month). Enter the real times when you have them.', go: function () { goTimesheet(estDays[0]); } });
+    Object.keys(holreq).map(function (id) { return holreq[id]; }).filter(function (r) { return r.status === 'pending'; }).sort(function (a, b) { return a.from < b.from ? -1 : 1; }).forEach(function (r) {
+      var ago = r.sentAt ? Math.floor((Date.now() - new Date(r.sentAt).getTime()) / 864e5) : 0;
+      todo.push({ t: 'Holiday request for ' + (r.from === r.to ? shortDate(parseISO(r.from)) : shortDate(parseISO(r.from)) + ' – ' + shortDate(parseISO(r.to))) + ' is waiting for a reply' + (ago >= 1 ? ' (sent ' + ago + (ago === 1 ? ' day' : ' days') + ' ago)' : ''), go: function () { setView('pay'); var c = $('#holCard'); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth' }); } });
+    });
     if (!todo.length) box.appendChild(mk('p', 'hint', 'All caught up. Nothing needs doing.'));
     todo.slice(0, 6).forEach(function (x) { box.appendChild(lineEl(x.t, '›', '', '', x.go)); });
 
@@ -2472,7 +2641,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         try { var b = await idbGet(rec.assetId); if (b) files[rec.assetId] = { type: b.type || rec.contentType, b64: await blobToB64(b) }; } catch (e) {}
       }
     }
-    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule, phones: phones };
+    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule, phones: phones, holreq: holreq };
   }
   async function markBackedUp() {
     settings.lastBackup = new Date().toISOString();
@@ -2548,6 +2717,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       }
       var ns = restoreSchedule(data.schedule);
       restorePhones(data.phones);
+      restoreHolreq(data.holreq);
       loadForm(); renderWeek(); renderMonth(); renderPay(); renderSched(); showBackup(); showSync();
       toast('Restored ' + n + (n === 1 ? ' day' : ' days') + (ns ? ' and ' + ns + (ns === 1 ? ' scheduled day' : ' scheduled days') : ''));
     } catch (err) { toast('Could not read that file'); }
@@ -2558,6 +2728,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     $('#sName').value = settings.name || '';
     $('#sMe').value = settings.me || '';
     $('#sOffice').value = settings.office || '';
+    $('#sHolTo').value = settings.holTo || '';
     setT('sStart', settings.defStart);
     setT('sEnd', settings.defEnd);
     showBackup();
@@ -2586,6 +2757,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       name: $('#sName').value.trim(),
       me: $('#sMe').value.trim(),
       office: $('#sOffice').value.trim(),
+      holTo: $('#sHolTo').value.trim(),
       defStart: $('#sStart').value || '08:00',
       defEnd: $('#sEnd').value || '16:30',
       defBrk: Number($('#sBrk').value) || 0,
