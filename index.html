@@ -683,6 +683,11 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
           <div class="field"><label class="label" for="hbTo">Last day</label><input type="date" id="hbTo"></div>
         </div>
         <div class="field"><label class="label" for="hbNote">Note for the request (optional)</label><input type="text" id="hbNote" maxlength="200" placeholder="e.g. family wedding"></div>
+        <div class="field">
+          <label class="label" for="hbRecip">Send the request to</label>
+          <input type="text" id="hbRecip" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="boss@company.com, hr@company.com">
+          <p class="hint" id="hbRecipNote"></p>
+        </div>
         <button class="btn" id="hbRequest">Request holiday by email</button>
         <button class="btn ghost" id="hbBook">Book without asking</button>
         <p class="hint">Request emails the people set in Setup and keeps the request as waiting until you mark it approved or declined. Approved days are booked as holiday. Book without asking books the days straight away. Weekends are skipped, and you are warned about scheduled jobs, logged days and your allowance. Tap a booked holiday above to cancel it.</p>
@@ -714,7 +719,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <div class="field">
           <label class="label" for="sHolTo">Who gets holiday requests</label>
           <textarea id="sHolTo" placeholder="One per line"></textarea>
-          <p class="hint">Request holiday on the Pay tab emails everyone listed here, plus you. Replies do not come back to the app, so mark each request as approved or declined yourself when you hear back.</p>
+          <p class="hint">Request holiday on the Pay tab emails everyone listed here, plus you. It saves as you type. Replies do not come back to the app, so mark each request as approved or declined yourself when you hear back.</p>
         </div>
       </div>
       <div class="card">
@@ -2109,6 +2114,26 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (me.indexOf('@') > 0 && to.map(function (x) { return x.toLowerCase(); }).indexOf(me.toLowerCase()) < 0) to.push(me);
     return to;
   }
+  function holTokens(v) { return String(v || '').split(/[\s,;]+/).map(function (x) { return x.trim(); }).filter(Boolean); }
+  function syncHolFields(from) {
+    var tokens = holTokens(settings.holTo), ti = $('#hbRecip'), ta = $('#sHolTo');
+    if (ti && from !== 'card') ti.value = tokens.join(', ');
+    if (ta && from !== 'setup') ta.value = tokens.join('\n');
+    var note = $('#hbRecipNote');
+    if (note) {
+      var good = holToList(), bad = tokens.filter(function (x) { return x.indexOf('@') < 1; });
+      note.textContent = !tokens.length ? 'Add the email address of whoever should get the request. It is saved as you type.'
+        : bad.length ? 'This does not look like an email address: ' + bad.join(', ')
+        : 'Saved. The request will go to ' + good.join(', ') + (settings.me ? ' and a copy to you.' : '.');
+    }
+  }
+  function saveHolTo(v, from) {
+    settings.holTo = holTokens(v).join('\n');
+    lsSet('hourslog:settings', settings);
+    syncHolFields(from);
+  }
+  $('#hbRecip').addEventListener('input', function () { saveHolTo(this.value, 'card'); });
+  $('#sHolTo').addEventListener('input', function () { saveHolTo(this.value, 'setup'); });
   var pendingDays = function () { var m = {}; Object.keys(holreq).forEach(function (id) { if (holreq[id].status === 'pending') holreq[id].days.forEach(function (d) { m[d] = id; }); }); return m; };
   function holRange(r) { return r.from === r.to ? longDate(parseISO(r.from)) : longDate(parseISO(r.from)) + ' to ' + longDate(parseISO(r.to)); }
   function holSubject(r, reminder) { return (reminder ? 'Reminder: ' : '') + 'Holiday request – ' + (settings.name || 'Hours Log') + ' – ' + (r.from === r.to ? shortDate(parseISO(r.from)) : shortDate(parseISO(r.from)) + ' to ' + shortDate(parseISO(r.to))) + ' ' + parseISO(r.to).getFullYear(); }
@@ -2179,7 +2204,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   }
   async function resendReq(r, btn) {
     var to = holEmailTo();
-    if (!holToList().length) { toast('Add who gets holiday requests in Setup first'); return; }
+    if (!holToList().length) { toast('Type the email address to send it to first'); return; }
     if (!window.confirm('Send this request again to ' + holToList().join(', ') + '?')) return;
     btn.disabled = true;
     try {
@@ -2199,7 +2224,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (!days.length) { toast('Those days are all weekend'); return; }
     var fresh = days.filter(function (k) { return !(entries[k] && entries[k].type === 'holiday'); });
     if (!fresh.length) { toast('Already booked'); return; }
-    if (!holToList().length) { toast('Add who gets holiday requests in Setup first'); setView('setup'); return; }
+    if (!holToList().length) { toast('Type the email address to send it to first'); var rc = $('#hbRecip'); rc.focus(); if (rc.scrollIntoView) rc.scrollIntoView({ block: 'center' }); return; }
     var r = { id: 'h' + Date.now().toString(36), from: fresh[0], to: fresh[fresh.length - 1], days: fresh, note: note, status: 'pending', sentAt: new Date().toISOString(), decidedAt: '', sentTo: holToList() };
     var msgs = holWarnings(fresh);
     var ask = (msgs.length ? msgs.join('\n') + '\n\n' : '') + 'Send a holiday request for ' + holRange(r) + ' (' + fresh.length + (fresh.length === 1 ? ' working day' : ' working days') + ') to ' + holToList().join(', ') + '?';
@@ -2226,6 +2251,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function renderHoliday() {
     if (!$('#holCard')) return;
     var st = holStats();
+    if (document.activeElement !== $('#hbRecip')) syncHolFields();
     $('#holTaken').textContent = st.taken; $('#holBooked').textContent = st.booked;
     $('#holLeft').textContent = st.left == null ? '–' : st.left;
     var rq = $('#holReqs'); rq.innerHTML = '';
