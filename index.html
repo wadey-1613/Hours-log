@@ -420,6 +420,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         <div class="stack" id="hActions" style="gap:10px"></div>
       </div>
       <div class="card jobcard" id="hJobCard" hidden></div>
+      <div class="card" id="hHomeCard" hidden></div>
       <div class="card hbtn" id="hWeekCard">
         <div class="label">This week</div>
         <div class="big" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="num" style="font-size:2.5rem" id="hWeekTotal">0:00</span><span class="dec" id="hWeekOf"></span></div>
@@ -781,6 +782,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       <div class="card">
         <h2>Travel</h2>
         <div class="field"><label class="label" for="sHome">Home postcode</label><input type="text" id="sHome" autocapitalize="characters" autocomplete="off" maxlength="9" placeholder="e.g. CM1 1AA"></div>
+        <div class="field"><label class="label" for="sHomeAddr">Home address for Google Maps (optional)</label><input type="text" id="sHomeAddr" autocomplete="off" maxlength="120" placeholder="e.g. 12 High Street, Chelmsford"><p class="hint">The Home button on the Home screen uses this if it is filled in, otherwise your postcode. A full address is more exact than a postcode.</p></div>
         <div class="row2">
           <div class="field"><label class="label" for="sTraffic">Traffic allowance (%)</label><input type="number" id="sTraffic" inputmode="numeric" min="0" max="200" step="5"></div>
           <div class="field"><label class="label" for="sBuffer">Extra minutes</label><input type="number" id="sBuffer" inputmode="numeric" min="0" max="120" step="5"></div>
@@ -2538,30 +2540,29 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   var homeToken = 0;
   function goTimesheet(k) { selDate = k; loadForm(); setView('day'); }
 
-  function renderJobCard(now, st, e, token) {
-    var card = $('#hJobCard'); if (!card) return;
-    card.innerHTML = '';
-    if (!st.length || (e && e.type)) { card.hidden = true; return; }
-    var nowMin = now.getHours() * 60 + now.getMinutes(), started = !!(e && e.start), idx = 0;
-    if (started) { idx = -1; for (var i = 0; i < st.length; i++) if (toMin(st[i].time) >= nowMin - 15) { idx = i; break; } if (idx < 0) idx = st.length - 1; }
-    var s = st[idx], label = idx === 0 ? 'First job today' : (idx === st.length - 1 && toMin(s.time) < nowMin - 15 ? 'Last job today' : 'Next job');
+  function nextJobDay(now) {
+    for (var i = 1; i <= 60; i++) { var k = iso(addDays(now, i)); if (stopsOn(k).length) return k; }
+    return '';
+  }
+  function fillJobCard(card, s, o, token, now) {
     card.hidden = false;
-    card.appendChild(mk('div', 'label', label));
+    card.appendChild(mk('div', 'label', o.label));
+    if (o.done) card.appendChild(mk('div', 'hint', o.done));
     var head = mk('div', 'stoph'); head.appendChild(mk('span', 'jt', s.time));
     if (s.id) head.appendChild(mk('span', 'stopid', 'Job ' + s.id));
     card.appendChild(head);
     if (s.note) card.appendChild(mk('div', 'stopnote', s.note));
     card.appendChild(mk('div', 'jline', s.lines.concat(s.pc ? [s.pc] : []).join(', ')));
     if (s.contact) card.appendChild(mk('div', 'stopwho', 'Contact: ' + s.contact));
-    var when = mk('div', 'jwhen', 'Arrive by ' + s.time); card.appendChild(when);
-    var from = idx === 0 ? normPC(settings.homePostcode) : normPC(st[idx - 1].pc);
+    card.appendChild(mk('div', 'jwhen', 'Arrive by ' + s.time + (o.dateText ? (o.dateText === 'tomorrow' ? ' tomorrow' : ' on ' + o.dateText) : '')));
+    var from = o.fromPC ? normPC(o.fromPC) : normPC(settings.homePostcode);
     if (s.pc && from && from !== normPC(s.pc)) {
       var tl = mk('div', 'jwhen', 'Working out when to leave…'); card.appendChild(tl);
       driveMins(from, s.pc).then(function (base) {
         if (token !== homeToken) return;
-        tl.textContent = (idx === 0 ? 'From home' : 'From ' + (st[idx - 1].lines[0] || 'the previous stop')) + ': about ' + fmtDur(base) + ' drive. Leave by ' + hhmm(leaveTime(base, toMin(s.time))) + '.';
+        tl.textContent = (o.fromLabel || 'From home') + ': about ' + fmtDur(base) + ' drive. Leave by ' + hhmm(leaveTime(base, toMin(s.time))) + '.';
       }).catch(function () { if (token === homeToken) tl.textContent = ''; });
-    } else if (idx === 0 && !normPC(settings.homePostcode)) card.appendChild(mk('div', 'hint', 'Add your home postcode in Setup to see when to leave.'));
+    } else if (!o.fromPC && !normPC(settings.homePostcode)) card.appendChild(mk('div', 'hint', 'Add your home postcode in Setup to see when to leave.'));
     var b = mk('div', 'jbtns');
     if (s.pc) {
       var q = encodeURIComponent(mapQuery(s));
@@ -2570,8 +2571,36 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       if (ph && ph.num) { var c = mk('a', 'btn ghost', 'Call'); c.href = 'tel:' + ph.num.replace(/[^\d+]/g, ''); b.appendChild(c); }
       else { ensurePhones([s]).then(function () { var p2 = phones[normPC(s.pc)]; if (p2 && p2.num && currentView === 'home' && token === homeToken) renderHome(); }); }
     }
-    var sc = mk('button', 'btn ghost' + (b.querySelector('a:not(.full)') ? '' : ' full'), "Today's schedule"); sc.type = 'button'; sc.addEventListener('click', function () { schedDay = iso(now); setView('sched'); }); b.appendChild(sc);
+    var sc = mk('button', 'btn ghost' + (b.querySelector('a:not(.full)') ? '' : ' full'), o.dayKey === iso(now) ? "Today's schedule" : 'See that day'); sc.type = 'button';
+    sc.addEventListener('click', function () { schedDay = o.dayKey; setView('sched'); }); b.appendChild(sc);
     card.appendChild(b);
+  }
+  function renderJobCard(now, st, e, token) {
+    var card = $('#hJobCard'); if (!card) return;
+    card.innerHTML = '';
+    var today = iso(now), nowMin = now.getHours() * 60 + now.getMinutes();
+    var onLeave = !!(e && e.type), finished = !!(e && e.start && e.end);
+    var dayDone = !st.length || onLeave || finished || nowMin >= toMin(st[st.length - 1].time) + 90;
+    if (!dayDone) {
+      var started = !!(e && e.start), idx = 0;
+      if (started) { idx = -1; for (var i = 0; i < st.length; i++) if (toMin(st[i].time) >= nowMin - 15) { idx = i; break; } if (idx < 0) idx = st.length - 1; }
+      var s = st[idx], label = idx === 0 ? 'First job today' : (idx === st.length - 1 && toMin(s.time) < nowMin - 15 ? 'Last job today' : 'Next job');
+      fillJobCard(card, s, { label: label, dayKey: today, fromPC: idx === 0 ? '' : st[idx - 1].pc, fromLabel: idx === 0 ? 'From home' : 'From ' + (st[idx - 1].lines[0] || 'the previous stop') }, token, now);
+      return;
+    }
+    var nd = nextJobDay(now);
+    if (!nd) { card.hidden = !st.length || onLeave; if (st.length && !onLeave) { card.appendChild(mk('div', 'label', 'Jobs')); card.appendChild(mk('p', '', 'All of today’s jobs are done and nothing else is scheduled.')); } return; }
+    var first = stopsOn(nd)[0], dt = parseISO(nd);
+    fillJobCard(card, first, { label: (nd === iso(addDays(now, 1)) ? 'Next job · tomorrow' : 'Next job · ' + longDate(dt)), dayKey: nd, dateText: nd === iso(addDays(now, 1)) ? 'tomorrow' : longDate(dt), done: st.length && !onLeave ? 'Today’s jobs are done.' : '' }, token, now);
+  }
+  function renderHomeButton() {
+    var card = $('#hHomeCard'); if (!card) return;
+    card.innerHTML = '';
+    var dest = (settings.homeAddr || '').trim() || normPC(settings.homePostcode);
+    card.hidden = false;
+    if (!dest) { card.appendChild(mk('p', 'hint', 'Add your home postcode in Setup to get a one-tap Home button for Google Maps.')); return; }
+    var a = mk('a', 'btn', 'Go home · Google Maps'); a.href = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(dest); a.target = '_blank'; a.rel = 'noopener';
+    card.appendChild(a);
   }
 
   function renderHome() {
@@ -2596,6 +2625,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     }
 
     renderJobCard(now, st, e, token);
+    renderHomeButton();
 
     // this week
     var mon = mondayOf(now), w = weekData(mon);
@@ -2775,6 +2805,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     syncLockUI();
     $('#sAutoFill').checked = settings.autoFill !== false;
     $('#sHome').value = settings.homePostcode || '';
+    $('#sHomeAddr').value = settings.homeAddr || '';
     $('#sTraffic').value = settings.trafficPct == null ? 20 : settings.trafficPct;
     $('#sBuffer').value = settings.bufferMins == null ? 10 : settings.bufferMins;
   }
@@ -2803,6 +2834,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       checkBeforeSend: $('#sCheck').checked,
       autoFill: $('#sAutoFill').checked,
       homePostcode: normPC($('#sHome').value),
+      homeAddr: $('#sHomeAddr').value.trim().slice(0, 120),
       trafficPct: $('#sTraffic').value === '' ? 20 : Math.max(0, Math.min(200, Number($('#sTraffic').value) || 0)),
       bufferMins: $('#sBuffer').value === '' ? 10 : Math.max(0, Math.min(120, Number($('#sBuffer').value) || 0)),
       lastBackup: settings.lastBackup || ''
