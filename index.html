@@ -1441,7 +1441,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 
   /* ---------- schedule ---------- */
   var DOWS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
-  var DATE_RE = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\.?,?\s+(\d{4})\s*$/i;
+  var DATE_RE = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\.?(?:,?\s+(\d{4}))?\s*$/i;
   var STOP_RE = /^(\d{1,2}):(\d{2})\s*(?:\(([^)]*)\))?\s*(.*)$/;
   var PC_LINE = /^(.*?)(?:^|\s)([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$/i;
   function normPC(p) { var t = String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t.length > 3 ? t.slice(0, -3) + ' ' + t.slice(-3) : t; }
@@ -1450,7 +1450,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 
   function parseSchedule(text) {
     var lines = String(text || '').replace(/\r/g, '').replace(/[‘’]/g, "'").replace(/ /g, ' ').split('\n');
-    var days = {}, warn = [], cur = null, curDate = '', stage = 0, nStops = 0;
+    var days = {}, warn = [], cur = null, curDate = '', stage = 0, nStops = 0, lastDate = null;
     function finish() {
       if (cur && !cur.pc) warn.push('No postcode found for the ' + cur.time + ' stop on ' + longDate(parseISO(curDate)) + '.');
       cur = null;
@@ -1458,12 +1458,19 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     lines.forEach(function (raw) {
       var L = raw.replace(/\s+/g, ' ').trim();
       if (!L) return;
-      var m = DATE_RE.exec(L);
-      if (m) {
+      var m = DATE_RE.exec(L), mi = -1;
+      if (m) mi = MONTHS.map(function (x) { return x.toLowerCase(); }).indexOf(m[3].slice(0, 3).toLowerCase());
+      if (m && mi >= 0) {
         finish();
-        var mi = MONTHS.map(function (x) { return x.toLowerCase(); }).indexOf(m[3].slice(0, 3).toLowerCase());
-        if (mi < 0) { warn.push('Could not read the date "' + L + '".'); curDate = ''; return; }
-        var dt = new Date(Number(m[4]), mi, Number(m[2]));
+        var yr;
+        if (m[4]) yr = Number(m[4]);
+        else if (lastDate) { yr = lastDate.getFullYear(); if (mi < lastDate.getMonth() - 6) yr++; }
+        else {
+          var ny = new Date().getFullYear(), best = ny;
+          [ny - 1, ny, ny + 1].forEach(function (y) { if (Math.abs(new Date(y, mi, Number(m[2])) - new Date()) < Math.abs(new Date(best, mi, Number(m[2])) - new Date())) best = y; });
+          yr = best;
+        }
+        var dt = new Date(yr, mi, Number(m[2])); lastDate = dt;
         if (dt.getDay() !== DOWS[m[1].slice(0, 3).toLowerCase()]) warn.push('"' + L + '" does not match the calendar (that date is a ' + dayName(dt) + ').');
         curDate = iso(dt); days[curDate] = days[curDate] || []; stage = 0;
         return;
