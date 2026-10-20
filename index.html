@@ -883,6 +883,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       <input type="text" id="impKw" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. schedule">
     </div>
     <button class="btn" id="impFetch">Fetch the latest schedule email</button>
+    <p class="hint" id="impAcct" style="font-weight:600"></p>
+    <button class="linkbtn" id="impSwitch" type="button">Use a different Google account</button>
     <div class="chips" id="impPick"></div>
     <p class="hint" id="impSrc"></p>
     <details class="more">
@@ -1674,8 +1676,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 
   /* --- fetch the schedule email from Gmail --- */
   var gTokR = '', gExpR = 0;
-  async function gTokenRead() {
-    if (gTokR && Date.now() < gExpR) return gTokR;
+  async function gTokenRead(pick) {
+    if (!pick && gTokR && Date.now() < gExpR) return gTokR;
     var cid = clientId(); if (!cid) throw { code: 'noclient' };
     try { await loadGIS(); } catch (e) { throw { code: 'offline' }; }
     return new Promise(function (resolve, reject) {
@@ -1688,7 +1690,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
         },
         error_callback: function (e) { reject({ code: 'auth', message: (e && e.type) || '' }); }
       });
-      tc.requestAccessToken({});
+      tc.requestAccessToken(pick ? { prompt: 'select_account' } : {});
     });
   }
   async function gGet(path) {
@@ -1744,15 +1746,18 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
     if (err && err.code === 'api' && err.status === 403) return 'Google refused (403). The Gmail read permission may not be added to your Google project yet. Open the steps below, then try again.' + (err.message ? ' (' + err.message + ')' : '');
     return gErrMsg(err).replace(' or use Share to Mail or Outlook', '').replace('Use Share to Mail or Outlook instead.', 'Please try again.');
   }
-  async function fetchFromGmail() {
+  async function fetchFromGmail(pick) {
     var from = ($('#impFrom').value || '').trim(), kw = ($('#impKw').value || '').trim(), btn = $('#impFetch');
     if (!from && !kw) { setImpMsg('Enter the sender address, or a word from the subject, first.'); $('#impFrom').focus(); return; }
     var q = [from ? 'from:(' + from + ')' : '', kw ? 'subject:(' + kw + ')' : '', 'newer_than:45d'].filter(Boolean).join(' ');
     btn.disabled = true; $('#impPick').innerHTML = ''; setImpMsg('Signing in to Google…');
     try {
+      if (pick === true) { gTokR = ''; await gTokenRead(true); }
+      var acct = ''; try { acct = (await gGet('profile')).emailAddress || ''; } catch (e) { if (e && e.code !== 'api') throw e; }
+      $('#impAcct').textContent = acct ? 'Searching ' + acct : '';
       var list = await gGet('messages?maxResults=6&q=' + encodeURIComponent(q));
       var ids = (list.messages || []).map(function (m) { return m.id; });
-      if (!ids.length) { setImpMsg('No emails found' + (from ? ' from ' + from : '') + ' in the last 45 days. Check the address, and that the email has reached this Gmail.'); return; }
+      if (!ids.length) { setImpMsg('No emails found' + (from ? ' from ' + from : '') + ' in the last 45 days' + (acct ? ' in ' + acct : '') + '. If the email was sent to a different Gmail, press Use a different Google account and choose that one.'); return; }
       setImpMsg('Reading ' + ids.length + (ids.length === 1 ? ' email…' : ' emails…'));
       var out = [];
       for (var i = 0; i < ids.length; i++) {
@@ -1765,7 +1770,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       impMsgs = out;
       var best = out.filter(function (x) { return x.stops > 0; })[0];
       renderImpPick();
-      if (!best) { setImpMsg('Found ' + out.length + (out.length === 1 ? ' email' : ' emails') + ', but none looked like a schedule. Check the sender and subject.'); return; }
+      if (!best) { setImpMsg('Found ' + out.length + (out.length === 1 ? ' email' : ' emails') + (acct ? ' in ' + acct : '') + ', but none looked like a schedule. Check the sender and subject.'); return; }
       loadImpMsg(best);
     } catch (err) { setImpMsg(readErrMsg(err)); }
     finally { btn.disabled = false; }
@@ -1773,7 +1778,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
   function saveSchedSource() { settings.schedFrom = ($('#impFrom').value || '').trim(); settings.schedKw = ($('#impKw').value || '').trim(); lsSet('hourslog:settings', settings); }
   $('#impFrom').addEventListener('input', saveSchedSource);
   $('#impKw').addEventListener('input', saveSchedSource);
-  $('#impFetch').addEventListener('click', fetchFromGmail);
+  $('#impFetch').addEventListener('click', function () { fetchFromGmail(); });
+  $('#impSwitch').addEventListener('click', function () { fetchFromGmail(true); });
   $('#schedFetch').addEventListener('click', function () {
     $('#impText').value = ''; impCheck(); impMsgs = []; renderImpPick(); setImpMsg('');
     $('#impFrom').value = settings.schedFrom || ''; $('#impKw').value = settings.schedKw || '';
