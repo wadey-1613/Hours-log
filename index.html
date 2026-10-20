@@ -574,6 +574,7 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       <p class="hint" id="travelHint"></p>
       <div class="stack">
         <button class="btn" id="schedImport">Import schedule</button>
+        <button class="btn ghost" id="schedFetch">Fetch from Gmail</button>
         <button class="btn plain" id="schedClearDay" hidden>Remove this day's schedule</button>
         <button class="btn plain" id="schedClear" hidden>Remove this week's schedule</button>
       </div>
@@ -873,7 +874,28 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
 <div class="sheet" id="impSheet" hidden>
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="impTitle">
     <div class="head"><h2 id="impTitle">Import schedule</h2><button class="iconbtn" id="impClose" aria-label="Close" style="min-width:48px">&times;</button></div>
-    <p class="hint">Copy the schedule email in Outlook, then press Import schedule. It is picked up from your clipboard automatically. If nothing appears, press Paste from clipboard, or paste it into the box.</p>
+    <div class="field">
+      <label class="label" for="impFrom">Fetch from Gmail: sender address</label>
+      <input type="text" id="impFrom" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. rota@company.com">
+    </div>
+    <div class="field">
+      <label class="label" for="impKw">Word in the subject (optional)</label>
+      <input type="text" id="impKw" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. schedule">
+    </div>
+    <button class="btn" id="impFetch">Fetch the latest schedule email</button>
+    <div class="chips" id="impPick"></div>
+    <p class="hint" id="impSrc"></p>
+    <details class="more">
+      <summary>First time? Add the Gmail read permission</summary>
+      <ol class="hint" style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li>On a computer, open console.cloud.google.com and choose your Hours Log project.</li>
+        <li>Open Google Auth Platform, then Data Access, then Add or remove scopes.</li>
+        <li>Find the Gmail API scope that ends in <b>gmail.readonly</b>, tick it and Save.</li>
+        <li>Come back here and press the button. Google will ask you to approve reading your mail. Press Advanced, then continue, as before.</li>
+      </ol>
+      <p class="hint">The app only fetches emails from the sender you enter, and keeps nothing from Google except what you save here. The permission itself covers your whole mailbox, because Google has no narrower one.</p>
+    </details>
+    <p class="hint">Or copy the schedule email and press Import schedule. It is picked up from your clipboard automatically. If nothing appears, press Paste from clipboard, or paste it into the box below.</p>
     <button class="btn ghost" id="impPaste">Paste from clipboard</button>
     <div class="field"><label class="label" for="impText">Schedule email</label><textarea id="impText" rows="6" spellcheck="false" autocomplete="off"></textarea></div>
     <div class="status" id="impPrev" aria-live="polite"></div>
@@ -1640,8 +1662,117 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       if (!quiet) toast(t && t.trim() ? 'The clipboard does not look like a schedule' : 'The clipboard is empty');
     } catch (err) { if (!quiet) toast('Could not read the clipboard. Paste it into the box instead.'); }
   }
-  $('#schedImport').addEventListener('click', function () { $('#impText').value = ''; impCheck(); $('#impSheet').hidden = false; pasteClip(true); });
+  $('#schedImport').addEventListener('click', function () { $('#impText').value = ''; impCheck(); impMsgs = []; renderImpPick(); setImpMsg(''); $('#impFrom').value = settings.schedFrom || ''; $('#impKw').value = settings.schedKw || ''; $('#impSheet').hidden = false; pasteClip(true); });
   $('#impPaste').addEventListener('click', function () { pasteClip(false); });
+
+  /* --- fetch the schedule email from Gmail --- */
+  var gTokR = '', gExpR = 0;
+  async function gTokenRead() {
+    if (gTokR && Date.now() < gExpR) return gTokR;
+    var cid = clientId(); if (!cid) throw { code: 'noclient' };
+    try { await loadGIS(); } catch (e) { throw { code: 'offline' }; }
+    return new Promise(function (resolve, reject) {
+      var tc = google.accounts.oauth2.initTokenClient({
+        client_id: cid,
+        scope: 'https://www.googleapis.com/auth/gmail.readonly',
+        callback: function (r) {
+          if (r && r.access_token) { gTokR = r.access_token; gExpR = Date.now() + ((Number(r.expires_in) || 3600) - 120) * 1000; resolve(gTokR); }
+          else reject({ code: 'auth', message: (r && (r.error_description || r.error)) || '' });
+        },
+        error_callback: function (e) { reject({ code: 'auth', message: (e && e.type) || '' }); }
+      });
+      tc.requestAccessToken({});
+    });
+  }
+  async function gGet(path) {
+    var tok = await gTokenRead(), r;
+    try { r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { headers: { Authorization: 'Bearer ' + tok } }); }
+    catch (e) { throw { code: 'offline' }; }
+    if (r.status === 401) { gTokR = ''; throw { code: 'auth', message: 'Sign-in expired' }; }
+    if (!r.ok) { var j = {}; try { j = await r.json(); } catch (e) {} throw { code: 'api', status: r.status, message: (j.error && j.error.message) || '' }; }
+    return r.json();
+  }
+  function b64uToText(x) {
+    x = String(x).replace(/-/g, '+').replace(/_/g, '/'); while (x.length % 4) x += '=';
+    var bin = atob(x), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(u);
+  }
+  function findPart(p, type) {
+    if (!p) return null;
+    if (p.mimeType === type && p.body && p.body.data) return p;
+    for (var i = 0; i < (p.parts || []).length; i++) { var f = findPart(p.parts[i], type); if (f) return f; }
+    return null;
+  }
+  function htmlToText(h) {
+    var d = new DOMParser().parseFromString(h, 'text/html');
+    d.querySelectorAll('script,style').forEach(function (n) { n.remove(); });
+    d.querySelectorAll('br').forEach(function (n) { n.replaceWith('\n'); });
+    d.querySelectorAll('p,div,tr,li,h1,h2,h3,h4,h5,h6,table').forEach(function (n) { n.insertAdjacentText('beforeend', '\n'); });
+    return (d.body.textContent || '').replace(/ /g, ' ');
+  }
+  function messageText(m) {
+    var pl = m.payload, t = findPart(pl, 'text/plain'), h = findPart(pl, 'text/html');
+    var plain = t ? b64uToText(t.body.data) : '';
+    if (plain && parseSchedule(plain).stops) return plain;
+    var html = h ? htmlToText(b64uToText(h.body.data)) : '';
+    if (html && parseSchedule(html).stops) return html;
+    return plain || html;
+  }
+  var impMsgs = [];
+  function setImpMsg(t) { $('#impSrc').textContent = t || ''; }
+  function loadImpMsg(m) {
+    $('#impText').value = m.text; impCheck();
+    setImpMsg('Using: ' + m.subject + ' (' + new Date(m.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + '). Check the preview, then press Save schedule.');
+  }
+  function renderImpPick() {
+    var box = $('#impPick'); box.innerHTML = '';
+    if (impMsgs.length < 2) return;
+    impMsgs.forEach(function (m) {
+      var b = mk('button', 'chip', new Date(m.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · ' + (m.stops ? m.stops + (m.stops === 1 ? ' stop' : ' stops') : 'no schedule')); b.type = 'button';
+      b.disabled = !m.stops; b.addEventListener('click', function () { loadImpMsg(m); });
+      box.appendChild(b);
+    });
+  }
+  function readErrMsg(err) {
+    if (err && err.code === 'api' && err.status === 403) return 'Google refused (403). The Gmail read permission may not be added to your Google project yet. Open the steps below, then try again.' + (err.message ? ' (' + err.message + ')' : '');
+    return gErrMsg(err).replace(' or use Share to Mail or Outlook', '').replace('Use Share to Mail or Outlook instead.', 'Please try again.');
+  }
+  async function fetchFromGmail() {
+    var from = ($('#impFrom').value || '').trim(), kw = ($('#impKw').value || '').trim(), btn = $('#impFetch');
+    if (!from && !kw) { setImpMsg('Enter the sender address, or a word from the subject, first.'); $('#impFrom').focus(); return; }
+    var q = [from ? 'from:(' + from + ')' : '', kw ? 'subject:(' + kw + ')' : '', 'newer_than:45d'].filter(Boolean).join(' ');
+    btn.disabled = true; $('#impPick').innerHTML = ''; setImpMsg('Signing in to Google…');
+    try {
+      var list = await gGet('messages?maxResults=6&q=' + encodeURIComponent(q));
+      var ids = (list.messages || []).map(function (m) { return m.id; });
+      if (!ids.length) { setImpMsg('No emails found' + (from ? ' from ' + from : '') + ' in the last 45 days. Check the address, and that the email has reached this Gmail.'); return; }
+      setImpMsg('Reading ' + ids.length + (ids.length === 1 ? ' email…' : ' emails…'));
+      var out = [];
+      for (var i = 0; i < ids.length; i++) {
+        var m = await gGet('messages/' + ids[i] + '?format=full'), hd = {};
+        (m.payload && m.payload.headers || []).forEach(function (h) { hd[String(h.name).toLowerCase()] = h.value; });
+        var text = messageText(m);
+        out.push({ id: ids[i], subject: hd.subject || '(no subject)', date: Number(m.internalDate) || 0, text: text, stops: text ? parseSchedule(text).stops : 0 });
+      }
+      out.sort(function (a, b) { return b.date - a.date; });
+      impMsgs = out;
+      var best = out.filter(function (x) { return x.stops > 0; })[0];
+      renderImpPick();
+      if (!best) { setImpMsg('Found ' + out.length + (out.length === 1 ? ' email' : ' emails') + ', but none looked like a schedule. Check the sender and subject.'); return; }
+      loadImpMsg(best);
+    } catch (err) { setImpMsg(readErrMsg(err)); }
+    finally { btn.disabled = false; }
+  }
+  function saveSchedSource() { settings.schedFrom = ($('#impFrom').value || '').trim(); settings.schedKw = ($('#impKw').value || '').trim(); lsSet('hourslog:settings', settings); }
+  $('#impFrom').addEventListener('input', saveSchedSource);
+  $('#impKw').addEventListener('input', saveSchedSource);
+  $('#impFetch').addEventListener('click', fetchFromGmail);
+  $('#schedFetch').addEventListener('click', function () {
+    $('#impText').value = ''; impCheck(); impMsgs = []; renderImpPick(); setImpMsg('');
+    $('#impFrom').value = settings.schedFrom || ''; $('#impKw').value = settings.schedKw || '';
+    $('#impSheet').hidden = false;
+    if ((settings.schedFrom || settings.schedKw)) fetchFromGmail(); else { setImpMsg('Enter the address the schedule email comes from, then press the button.'); $('#impFrom').focus(); }
+  });
   $('#impClose').addEventListener('click', function () { $('#impSheet').hidden = true; });
   $('#impSave').addEventListener('click', function () {
     if (!impParsed || !impParsed.stops) return;
@@ -2837,6 +2968,8 @@ main > section:not([hidden]) { animation: rise 0.24s ease both; }
       homeAddr: $('#sHomeAddr').value.trim().slice(0, 120),
       trafficPct: $('#sTraffic').value === '' ? 20 : Math.max(0, Math.min(200, Number($('#sTraffic').value) || 0)),
       bufferMins: $('#sBuffer').value === '' ? 10 : Math.max(0, Math.min(120, Number($('#sBuffer').value) || 0)),
+      schedFrom: settings.schedFrom || '',
+      schedKw: settings.schedKw || '',
       lastBackup: settings.lastBackup || ''
     };
     try {
