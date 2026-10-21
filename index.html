@@ -1143,10 +1143,10 @@ select, option { color-scheme: inherit; }
   function paidMins(e) {
     var w = worked(e);
     if (!nightOn(e)) return w;
-    return Math.max(w, Math.max(0, Math.round(Number(settings.nightMin) * 60) - (Number(e.brk) || 0)));
+    return Math.max(w, Math.max(0, Math.round(Number(settings.nightMin) * 60)));
   }
   var nightStar = function (e) { return nightOn(e) ? '*' : ''; };
-  var nightFoot = function () { return '* Night away: paid at a minimum of ' + (Number(settings.nightMin) || 0) + ' hours, with breaks taken off.'; };
+  var nightFoot = function () { return '* Night away: paid at a minimum of ' + (Number(settings.nightMin) || 0) + ' hours.'; };
   var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, nightMin: 9.5, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2, homePostcode: '', trafficPct: 20, bufferMins: 10 };
   var PAYFIX = { taxCode: '509L', pensionPct: 4, pensionQual: true, pensionPre: false, sickPay: 24.65, payModel: 2 };
   var DEFAULT_CLIENT = '437915088090-7sravt763njs7of5pcm3kked3ollu4c5.apps.googleusercontent.com';
