@@ -1431,7 +1431,7 @@ select, option { color-scheme: inherit; }
     if (e && e.start) { loadForm(); return; }
     var t = nowQuarter();
     try {
-      await putEntry({ date: today, type: '', start: t, end: '', brk: Number(settings.defBrk) || 0, night: false, note: '' });
+      await putEntry({ date: today, type: '', start: t, end: '', brk: Number(settings.defBrk) || 0, night: false, note: jobRef(today) });
       loadForm(); renderWeek();
       toast('Started at ' + t);
     } catch (err) { toast('Could not save. Try again.'); }
@@ -1466,6 +1466,11 @@ select, option { color-scheme: inherit; }
       note: $('#note').value.trim()
     };
   }
+  function jobRef(k) {
+    var seen = {}, ids = [];
+    (Array.isArray(schedule[k]) ? schedule[k] : []).forEach(function (s) { var n = String(s.id || '').replace(/^#/, '').trim(); if (n && !seen[n]) { seen[n] = 1; ids.push('#' + n); } });
+    return ids.join(', ').slice(0, 120);
+  }
   function loadForm() {
     formTouched = false;
     $('#dayDate').value = selDate;
@@ -1480,7 +1485,7 @@ select, option { color-scheme: inherit; }
     setT('tEnd', e ? (e.type ? settings.defEnd : e.end) : settings.defEnd);
     $('#brk').value = e && !e.type ? e.brk : settings.defBrk;
     $('#night').checked = e ? !!e.night : false;
-    $('#note').value = e ? (e.note || '') : '';
+    $('#note').value = e && !e.type && e.note ? e.note : (e && e.type ? (e.note || '') : jobRef(selDate));
     $('#delDay').hidden = !e;
     updateReadout();
     updateStatus();
