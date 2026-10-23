@@ -1,6 +1,6 @@
 /* Hours Log service worker: makes the app open and work with no signal.
    Bump VERSION when releasing a new version so phones refresh their copy. */
-var VERSION = 'hourslog-v3';
+var VERSION = 'hourslog-v4';
 var CORE = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
@@ -20,15 +20,17 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  /* The page itself: try the network first so updates arrive, fall back to the saved copy. */
+  /* The page itself: open the saved copy straight away (no waiting on a weak signal),
+     and fetch a fresh copy in the background so the next open has any update. */
   if (req.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
     e.respondWith(
-      fetch(req).then(function (res) {
-        var copy = res.clone();
-        caches.open(VERSION).then(function (c) { c.put('index.html', copy); });
-        return res;
-      }).catch(function () {
-        return caches.match('index.html').then(function (r) { return r || caches.match('./'); });
+      caches.match('index.html').then(function (hit) {
+        var refresh = fetch(req).then(function (res) {
+          if (res && res.ok) { var copy = res.clone(); caches.open(VERSION).then(function (c) { c.put('index.html', copy); }); }
+          return res;
+        }).catch(function () { return null; });
+        if (hit) { e.waitUntil(refresh); return hit; }
+        return refresh.then(function (res) { return res || caches.match('./'); });
       })
     );
     return;
