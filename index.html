@@ -249,6 +249,18 @@ label.btn { display: flex; align-items: center; justify-content: center; cursor:
 .line.tap:active { background: var(--line); }
 .line.neg .v { color: var(--muted); }
 .num.money { font-size: 2.75rem; }
+.trk .trkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trkrange { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; }
+.trkrange button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.trkrange button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.trkbig { font-size: 2.4rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.trkrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 26px; }
+.trkbadge { font-size: 0.78rem; font-weight: 700; padding: 3px 9px; border-radius: 9px; }
+.trkbadge.up { background: rgba(22, 163, 74, 0.16); color: #16a34a; }
+.trkbadge.down { background: rgba(220, 38, 38, 0.16); color: #dc2626; }
+.trkchart { margin-top: 8px; touch-action: pan-y; }
+.trkchart svg { width: 100%; height: auto; display: block; }
+.trkchart text { fill: var(--muted); font-size: 10px; }
 .viewer { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; }
 .viewer .vbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .viewer .vbar .btn { min-height: 44px; padding: 0 14px; font-size: 0.9375rem; }
@@ -822,6 +834,14 @@ select, option { color-scheme: inherit; }
         </div>
       </div>
       <div id="payBody" class="stack" style="gap:16px">
+      <div class="card trk" id="trkCard">
+        <div class="trkhead"><div class="label">Pay tracker</div>
+          <div class="trkrange" role="group" aria-label="Range"><button type="button" data-n="6" aria-pressed="true">6M</button><button type="button" data-n="12" aria-pressed="false">12M</button></div></div>
+        <div class="trkbig" id="trkBig"></div>
+        <div class="trkrow"><span class="trkbadge" id="trkBadge" hidden></span><span class="hint" id="trkSub"></span></div>
+        <div id="trkChart" class="trkchart"></div>
+        <p class="hint" id="trkNote"></p>
+      </div>
       <div class="weeknav">
         <button class="iconbtn" id="prevPay" aria-label="Previous month">&lsaquo;</button>
         <div class="mid"><div class="label">Pay for</div><div id="payLabel"></div></div>
@@ -1308,7 +1328,7 @@ select, option { color-scheme: inherit; }
   var normCode = function (c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); };
   function payLocked() { return !!lockCfg() && !(payUnlocked && (currentView === 'pay' || Date.now() < payGrace)); }
   function scrubPay() {
-    ['#pNet', '#pHours', '#pLines', '#pWeeks', '#slipBody', '#actDiff', '#pWarn', '#payLabel', '#slipMsg'].forEach(function (q) { var x = $(q); if (x) x.textContent = ''; });
+    ['#trkBig', '#trkSub', '#trkNote', '#trkChart', '#trkBadge', '#pNet', '#pHours', '#pLines', '#pWeeks', '#slipBody', '#actDiff', '#pWarn', '#payLabel', '#slipMsg'].forEach(function (q) { var x = $(q); if (x) x.textContent = ''; });
     ['#actNet', '#exBonus', '#exDeduct'].forEach(function (q) { var x = $(q); if (x) x.value = ''; });
   }
   function syncLockUI() { var sw = $('#sLock'); if (sw) sw.checked = !!lockCfg(); }
@@ -2750,12 +2770,96 @@ select, option { color-scheme: inherit; }
     var v = document.createElement('div'); v.className = 'v'; v.textContent = val;
     d.appendChild(l); d.appendChild(v); return d;
   }
+  /* ---------- pay tracker: monthly take-home line graph ---------- */
+  var trkN = 6, trkSel = -1, trkPts = [];
+  function trkMonths() {
+    var keys = Object.keys(entries).concat(Object.keys(payslips)).filter(function (k) { return /^\d{4}-\d{2}/.test(k); }).sort();
+    var now = new Date(), cur = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (!keys.length) return [];
+    var first = new Date(Number(keys[0].slice(0, 4)), Number(keys[0].slice(5, 7)) - 1, 1);
+    var out = [], d = new Date(Math.max(first.getTime(), new Date(cur.getFullYear(), cur.getMonth() - (trkN - 1), 1).getTime()));
+    while (d <= cur) { out.push(new Date(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1); }
+    return out;
+  }
+  function trkValue(ms) {
+    var rec = payslips[payKeyFor(ms)] || {}, a = rec.actualNet;
+    if (a != null && a !== '' && isFinite(Number(a))) return { v: Number(a), actual: true };
+    return { v: computePay(ms).net, actual: false };
+  }
+  function trkPath(pts) {
+    if (pts.length < 2) return '';
+    var d = 'M' + pts[0].x + ',' + pts[0].y;
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      var c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6, c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ' C' + c1x.toFixed(1) + ',' + c1y.toFixed(1) + ' ' + c2x.toFixed(1) + ',' + c2y.toFixed(1) + ' ' + p2.x + ',' + p2.y;
+    }
+    return d;
+  }
+  function renderTracker() {
+    var box = $('#trkChart'); if (!box) return;
+    var months = trkMonths(), vals = months.map(trkValue);
+    $('#trkNote').textContent = '';
+    if (months.length < 2) {
+      box.innerHTML = ''; $('#trkBig').textContent = months.length ? gbp(vals[0].v) : '£0.00'; $('#trkBadge').hidden = true;
+      $('#trkSub').textContent = 'The graph appears once you have two months of hours logged.'; return;
+    }
+    if (trkSel < 0 || trkSel >= months.length) trkSel = months.length - 1;
+    var W = 320, H = 150, L = 8, R = 8, T = 14, B = 24;
+    var min = Math.min.apply(null, vals.map(function (x) { return x.v; })), max = Math.max.apply(null, vals.map(function (x) { return x.v; }));
+    if (max === min) { max += 1; min = Math.max(0, min - 1); }
+    var pad2 = (max - min) * 0.12; min -= pad2; max += pad2;
+    trkPts = vals.map(function (x, i) { return { x: +(L + (W - L - R) * i / (months.length - 1)).toFixed(1), y: +(T + (H - T - B) * (1 - (x.v - min) / (max - min))).toFixed(1) }; });
+    var line = trkPath(trkPts), last = trkPts[trkPts.length - 1], first = trkPts[0], base = H - B;
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Monthly take-home">'
+      + '<defs><linearGradient id="trkg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity="0.35"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'
+      + '<path d="' + line + ' L' + last.x + ',' + base + ' L' + first.x + ',' + base + ' Z" fill="url(#trkg)"/>'
+      + '<path d="' + line + '" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    var step = months.length > 8 ? 2 : 1;
+    months.forEach(function (m, i) {
+      if ((months.length - 1 - i) % step === 0) svg += '<text x="' + trkPts[i].x + '" y="' + (H - 7) + '" text-anchor="' + (i === 0 ? 'start' : i === months.length - 1 ? 'end' : 'middle') + '">' + m.toLocaleDateString('en-GB', { month: 'short' }) + '</text>';
+    });
+    var sp = trkPts[trkSel];
+    svg += '<line x1="' + sp.x + '" y1="' + T + '" x2="' + sp.x + '" y2="' + base + '" stroke="var(--muted)" stroke-opacity="0.35" stroke-dasharray="3 3"/>'
+      + '<circle cx="' + sp.x + '" cy="' + sp.y + '" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></svg>';
+    box.innerHTML = svg;
+    var cur = vals[trkSel], prev = trkSel > 0 ? vals[trkSel - 1].v : null;
+    $('#trkBig').textContent = gbp(cur.v);
+    var badge = $('#trkBadge');
+    if (prev != null && prev > 0) {
+      var pc = (cur.v - prev) / prev * 100; badge.hidden = false;
+      badge.className = 'trkbadge ' + (pc >= 0 ? 'up' : 'down');
+      badge.textContent = (pc >= 0 ? '↑ +' : '↓ ') + Math.abs(pc).toFixed(1) + '%';
+    } else badge.hidden = true;
+    var tot = vals.reduce(function (a, x) { return a + x.v; }, 0);
+    $('#trkSub').textContent = months[trkSel].toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) + (cur.actual ? ' · actual' : ' · estimate') + (prev != null ? ' vs last month' : '');
+    $('#trkNote').textContent = 'Take-home each month, using your actual take-home where you have entered it and the estimate otherwise. Total ' + gbp(tot) + ', average ' + gbp(tot / vals.length) + ' a month. Tap the graph to look at a month.';
+  }
+  (function () {
+    var box = $('#trkChart'); if (!box) return;
+    function pick(ev) {
+      if (!trkPts.length) return;
+      var r = box.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * 320, bi = 0, bd = 1e9;
+      trkPts.forEach(function (p, i) { var d = Math.abs(p.x - x); if (d < bd) { bd = d; bi = i; } });
+      if (bi !== trkSel) { trkSel = bi; renderTracker(); }
+    }
+    box.addEventListener('pointerdown', pick);
+    box.addEventListener('pointermove', function (ev) { if (ev.buttons || ev.pointerType === 'touch') pick(ev); });
+    document.querySelectorAll('.trkrange button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        trkN = Number(b.dataset.n); trkSel = -1;
+        document.querySelectorAll('.trkrange button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        renderTracker();
+      });
+    });
+  })();
   function renderPay() {
     if (!$('#payLabel')) return;
     var lk = payLocked();
     $('#payLock').hidden = !lk; $('#payBody').hidden = lk;
     if (lk) { scrubPay(); renderHolCard(); return; }
     $('#payLabel').textContent = payStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    renderTracker();
     var c = computePay(payStart);
     $('#pNet').textContent = gbp(c.net);
     $('#pHours').textContent = fmtHM(c.mins) + ' paid hours at ' + gbp(c.rate) + ' an hour';
