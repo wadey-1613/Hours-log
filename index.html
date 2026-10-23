@@ -1173,7 +1173,6 @@ select, option { color-scheme: inherit; }
   var nightStar = function (e) { return nightOn(e) ? '*' : ''; };
   var nightFoot = function () { return '* Night away: paid at a minimum of ' + (Number(settings.nightMin) || 0) + ' hours.'; };
   var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, nightMin: 9.5, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2, homePostcode: '', trafficPct: 20, bufferMins: 10 };
-  var PAYFIX = { taxCode: '509L', pensionPct: 4, pensionQual: true, pensionPre: false, sickPay: 24.65, payModel: 2 };
   var DEFAULT_CLIENT = '437915088090-7sravt763njs7of5pcm3kked3ollu4c5.apps.googleusercontent.com';
   var clientId = function () { return String(settings.gClientId || DEFAULT_CLIENT).trim(); };
   var TYPES = { holiday: 'Holiday', bank: 'Bank holiday', sick: 'Sick' };
@@ -2059,6 +2058,8 @@ select, option { color-scheme: inherit; }
     if ((settings.schedFrom || settings.schedKw)) fetchFromGmail(); else { setImpMsg('Enter the address the schedule email comes from, then press the button.'); $('#impFrom').focus(); }
   });
   $('#impClose').addEventListener('click', function () { $('#impSheet').hidden = true; });
+  $('#impSheet').addEventListener('click', function (ev) { if (ev.target === $('#impSheet')) $('#impSheet').hidden = true; });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') $('#impSheet').hidden = true; });
   $('#impSave').addEventListener('click', function () {
     if (!impParsed || !impParsed.stops) return;
     var first = '';
@@ -2278,7 +2279,6 @@ select, option { color-scheme: inherit; }
   /* ---------- month ---------- */
   var monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   var picked = {};
-  function monthKey() { return monthStart.getFullYear() + '-' + pad(monthStart.getMonth() + 1); }
   function monthLabelText() { return monthStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }); }
   /* A week runs Monday to Friday and belongs to the month its Friday falls in. */
   function weekGroup(mon) {
@@ -3218,7 +3218,7 @@ select, option { color-scheme: inherit; }
         try { var b = await idbGet(rec.assetId); if (b) files[rec.assetId] = { type: b.type || rec.contentType, b64: await blobToB64(b) }; } catch (e) {}
       }
     }
-    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule, phones: phones, holreq: holreq };
+    return { app: 'hours-log', version: 2, savedAt: new Date().toISOString(), settings: settings, entries: entries, payslips: payslips, payslipFiles: files, schedule: schedule, phones: phones, holreq: holreq, sends: sends };
   }
   async function markBackedUp() {
     settings.lastBackup = new Date().toISOString();
@@ -3295,6 +3295,10 @@ select, option { color-scheme: inherit; }
       var ns = restoreSchedule(data.schedule);
       restorePhones(data.phones);
       restoreHolreq(data.holreq);
+      if (data.sends && typeof data.sends === 'object') {
+        Object.keys(data.sends).forEach(function (k) { var v = data.sends[k]; if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v && typeof v === 'object' && !sends[k]) sends[k] = v; });
+        lsSet('hourslog:sends', sends);
+      }
       loadForm(); renderWeek(); renderMonth(); renderPay(); renderSched(); showBackup(); showSync();
       toast('Restored ' + n + (n === 1 ? ' day' : ' days') + (ns ? ' and ' + ns + (ns === 1 ? ' scheduled day' : ' scheduled days') : ''));
     } catch (err) { toast('Could not read that file'); }
@@ -3830,6 +3834,7 @@ select, option { color-scheme: inherit; }
   (function () { var sel = $('#sHolStart'); MONTHS.forEach(function (m, i) { var o = document.createElement('option'); o.value = String(i + 1); o.textContent = new Date(2026, i, 1).toLocaleDateString('en-GB', { month: 'long' }); sel.appendChild(o); }); })();
   buildTimes(); initStore();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (ev) { if (ev.data === 'hourslog-updated') toast('A new version is ready. Close and reopen the app to use it.'); });
   if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
 })();
 </script>

@@ -1,6 +1,6 @@
 /* Hours Log service worker: makes the app open and work with no signal.
    Bump VERSION when releasing a new version so phones refresh their copy. */
-var VERSION = 'hourslog-v6';
+var VERSION = 'hourslog-v7';
 var CORE = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
@@ -25,8 +25,16 @@ self.addEventListener('fetch', function (e) {
   if (req.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
     e.respondWith(
       caches.match('index.html').then(function (hit) {
+        var old = hit ? hit.clone() : null;
         var refresh = fetch(req).then(function (res) {
-          if (res && res.ok) { var copy = res.clone(); caches.open(VERSION).then(function (c) { c.put('index.html', copy); }); }
+          if (res && res.ok) {
+            var copy = res.clone(), fresh = res.clone();
+            caches.open(VERSION).then(function (c) { c.put('index.html', copy); });
+            /* Tell the open page when the saved copy has just changed. */
+            if (old) Promise.all([old.text(), fresh.text()]).then(function (t) {
+              if (t[0] !== t[1]) self.clients.matchAll().then(function (cs) { cs.forEach(function (c) { c.postMessage('hourslog-updated'); }); });
+            }).catch(function () {});
+          }
           return res;
         }).catch(function () { return null; });
         if (hit) { e.waitUntil(refresh); return hit; }
