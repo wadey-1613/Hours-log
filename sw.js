@@ -1,6 +1,6 @@
 /* Hours Log service worker: makes the app open and work with no signal.
    Bump VERSION when releasing a new version so phones refresh their copy. */
-var VERSION = 'hourslog-v2';
+var VERSION = 'hourslog-v3';
 var CORE = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

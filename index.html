@@ -859,7 +859,7 @@ select, option { color-scheme: inherit; }
         <button class="btn ghost" id="saveAct">Save take-home</button>
         <p class="hint" id="actDiff"></p>
       </div>
-      <p class="hint">This is an estimate, not a payslip. Weeks belong to the month their Friday falls in. The last week of the month is paid up to your cap and any hours over it are paid the next month at the same rate. Tax is worked out month by month, so your real payslip can differ by a few pounds. Bonuses and one-off deductions go in Extras for the month. Student loans are not included.</p>
+      <p class="hint">This is an estimate, not a payslip. Weeks belong to the month their Friday falls in. The last week of the month is always paid at your cap (40 hours) until your logged hours go over it, and any hours over it are paid the next month at the same rate. Tax is worked out month by month, so your real payslip can differ by a few pounds. Bonuses and one-off deductions go in Extras for the month. Student loans are not included.</p>
       </div>
       <div class="card" id="holCard">
         <div class="label">Holiday</div>
@@ -2708,7 +2708,7 @@ select, option { color-scheme: inherit; }
     var gs = groupsFor(ms), cap = Math.round((Number(settings.payCap) || 0) * 60);
     return gs.map(function (g, i) {
       var tot = weekPayMins(g), last = i === gs.length - 1;
-      var paid = last && cap > 0 ? Math.min(tot, cap) : tot;
+      var paid = last && cap > 0 ? cap : tot; /* final week always pays the cap until logged hours exceed it */
       return { g: g, tot: tot, paid: paid, out: last && cap > 0 ? Math.max(0, tot - cap) : 0, last: last };
     });
   }
@@ -2770,7 +2770,7 @@ select, option { color-scheme: inherit; }
     c.weeks.forEach(function (w) {
       var sub = w.g.any ? (w.g.worked + (w.g.worked === 1 ? ' day' : ' days') + (w.g.leave ? ', ' + w.g.leave + ' leave' : '')) : 'Nothing logged';
       if (w.out > 0) sub += ' · ' + fmtHM(w.out) + ' carried to next month';
-      if (w.last && !w.out) sub += ' · last week of the month';
+      if (w.last && !w.out) sub += w.paid > 0 && w.tot < w.paid ? ' · paid at ' + fmtHM(w.paid) + ' until you log more' : ' · last week of the month';
       wb.appendChild(lineEl('Week ' + w.g.n + ' · ' + shortDate(w.g.from) + ' – ' + shortDate(w.g.to), fmtHM(w.paid), '', sub + ' · tap to open', function () { weekStart = parseISO(w.g.mon); setView('week'); }));
     });
     if (c.carryOut > 0) wb.appendChild(lineEl('Carried to next month', fmtHM(c.carryOut), 'neg'));
