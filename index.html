@@ -1104,6 +1104,14 @@ select, option { color-scheme: inherit; }
   </div>
 </div>
 
+<div class="sheet" id="histSheet" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="histTitle">
+    <div class="head"><h2 id="histTitle">Site history</h2><button class="iconbtn" id="histClose" aria-label="Close" style="min-width:48px">&times;</button></div>
+    <p class="hint" id="histSub"></p>
+    <div id="histList" class="stack" style="gap:10px"></div>
+  </div>
+</div>
+
 <div class="sheet" id="impSheet" hidden>
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="impTitle">
     <div class="head"><h2 id="impTitle">Import schedule</h2><button class="iconbtn" id="impClose" aria-label="Close" style="min-width:48px">&times;</button></div>
@@ -1829,10 +1837,40 @@ select, option { color-scheme: inherit; }
       var nb = mk('button', 'notebtn'); nb.type = 'button'; withIcon(nb, 'note', 'Notes');
       nb.addEventListener('click', function () { notes.classList.toggle('open'); });
       b.appendChild(nb);
+      var hb = mk('button', 'notebtn'); hb.type = 'button'; withIcon(hb, 'list', 'History');
+      hb.addEventListener('click', function () { showSiteHistory(s); });
+      b.appendChild(hb);
       d.appendChild(b); d.appendChild(notes);
     }
     return d;
   }
+  /* --- site history: every scheduled visit to the same place --- */
+  function siteKey(s) { return s.pc ? 'pc:' + normPC(s.pc) : (s.lines && s.lines[0] ? 'n:' + s.lines[0].toLowerCase().replace(/\s+/g, ' ').trim() : ''); }
+  function showSiteHistory(s) {
+    var key = siteKey(s), list = $('#histList'), visits = [];
+    list.innerHTML = '';
+    $('#histTitle').textContent = (s.lines && s.lines[0]) || 'Site history';
+    if (key) Object.keys(schedule).sort().reverse().forEach(function (d) {
+      (Array.isArray(schedule[d]) ? schedule[d] : []).forEach(function (x) { if (siteKey(x) === key) visits.push({ d: d, s: x }); });
+    });
+    var today = iso(new Date()), past = visits.filter(function (v) { return v.d <= today; });
+    $('#histSub').textContent = !visits.length ? 'No visits found.' : past.length + (past.length === 1 ? ' visit' : ' visits') + ' so far' + (past.length ? ', last on ' + longDate(parseISO(past[0].d)) : '') + (visits.length > past.length ? ' · ' + (visits.length - past.length) + ' coming up' : '') + '.';
+    visits.forEach(function (v) {
+      var c = mk('div', 'stop'), e = entries[v.d], h = mk('div', 'stoph');
+      h.appendChild(mk('span', 'stopt', longDate(parseISO(v.d)) + (v.d > today ? ' (upcoming)' : '')));
+      if (v.s.id) h.appendChild(mk('span', 'stopid', '#' + v.s.id));
+      c.appendChild(h);
+      if (v.s.time) c.appendChild(mk('div', 'stoplines', 'Booked for ' + v.s.time));
+      if (e && !e.est && !e.type && e.mins) c.appendChild(mk('div', 'stoplines', 'Hours logged that day: ' + fmtHM(e.mins)));
+      if (v.s.note) c.appendChild(mk('div', 'stopnotebox', v.s.note));
+      if (e && e.note) c.appendChild(mk('div', 'stoplines', 'Day note: ' + e.note));
+      list.appendChild(c);
+    });
+    $('#histSheet').hidden = false;
+  }
+  $('#histClose').addEventListener('click', function () { $('#histSheet').hidden = true; });
+  $('#histSheet').addEventListener('click', function (ev) { if (ev.target === $('#histSheet')) $('#histSheet').hidden = true; });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') $('#histSheet').hidden = true; });
   var stopsOn = function (d) { return Array.isArray(schedule[d]) ? schedule[d] : []; };
 
   /* --- Schedule tab --- */
@@ -3223,6 +3261,13 @@ select, option { color-scheme: inherit; }
       var ago = r.sentAt ? Math.floor((Date.now() - new Date(r.sentAt).getTime()) / 864e5) : 0;
       todo.push({ t: 'Holiday request for ' + (r.from === r.to ? shortDate(parseISO(r.from)) : shortDate(parseISO(r.from)) + ' – ' + shortDate(parseISO(r.to))) + ' is waiting for a reply' + (ago >= 1 ? ' (sent ' + ago + (ago === 1 ? ' day' : ' days') + ' ago)' : ''), go: function () { setView('pay'); var c = $('#holCard'); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth' }); } });
     });
+    var hs0 = holStats();
+    if (hs0.allow > 0) {
+      var lyE = addDays(leaveYear().to, -1), toEnd = Math.round((lyE - new Date()) / 864e5), goHol = function () { setView('pay'); var c = $('#holCard'); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth' }); };
+      if (hs0.left < 0) todo.push({ t: 'You have booked ' + (-hs0.left) + (hs0.left === -1 ? ' day' : ' days') + ' more holiday than your allowance', go: goHol });
+      else if (hs0.left > 0 && toEnd >= 0 && toEnd <= 60) todo.push({ t: hs0.left + (hs0.left === 1 ? ' holiday day' : ' holiday days') + ' still to book before the leave year ends on ' + shortDate(lyE), go: goHol });
+      else if (hs0.left > 0 && hs0.left <= 3) todo.push({ t: 'Only ' + hs0.left + (hs0.left === 1 ? ' holiday day' : ' holiday days') + ' left this leave year', go: goHol });
+    }
     if (!todo.length) box.appendChild(mk('p', 'hint', 'All caught up. Nothing needs doing.'));
     todo.slice(0, 6).forEach(function (x) { box.appendChild(lineEl(x.t, '›', '', '', x.go)); });
 
