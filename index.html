@@ -1010,6 +1010,11 @@ select, option { color-scheme: inherit; }
         <h2>Send from Gmail</h2>
         <div class="field"><label class="label" for="sClient">Google sign-in code (Client ID)</label><input type="text" id="sClient" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Ends in .apps.googleusercontent.com"></div>
         <p class="hint">Needed once so the app can send email from your Gmail. Until you add it, use Share to Mail or Outlook when you send.</p>
+        <div class="row2">
+          <button class="btn ghost" id="gUseDefault" type="button">Use the built-in code</button>
+          <button class="btn ghost" id="gTest" type="button">Test Google sign-in</button>
+        </div>
+        <p class="hint" id="gDiag"></p>
         <details class="more">
           <summary>How to get the code (on a computer)</summary>
           <ol class="hint" style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
@@ -1080,6 +1085,7 @@ select, option { color-scheme: inherit; }
       <button class="btn" id="sendBtn">Send now</button>
       <button class="btn ghost" id="shareBtn">Share to Mail or Outlook</button>
       <div class="status" id="sendStatus" aria-live="polite"></div>
+      <button class="btn ghost" id="sentBackup" hidden>Email me a backup too</button>
       <details class="more">
         <summary>Other ways to send</summary>
         <div class="stack" style="margin-top:10px">
@@ -3250,6 +3256,7 @@ select, option { color-scheme: inherit; }
     finally { if (btn) btn.disabled = false; }
   }
   $('#backupMail').addEventListener('click', function () { emailBackup(this); });
+  $('#sentBackup').addEventListener('click', async function () { var b = this; await emailBackup(b); if (daysSinceBackup() === 0) b.hidden = true; });
   $('#syncNote').addEventListener('click', function () { backupNow(this); });
   $('#restoreFile').addEventListener('change', async function (ev) {
     var file = ev.target.files && ev.target.files[0];
@@ -3326,7 +3333,7 @@ select, option { color-scheme: inherit; }
     $('#sPenPre').checked = !!settings.pensionPre;
     $('#sHolDays').value = Number(settings.holDays) > 0 ? settings.holDays : '';
     $('#sHolStart').value = String(Number(settings.holStart) || 1);
-    $('#sClient').value = clientId();
+    $('#sClient').value = clientId(); if (typeof refreshDiag === 'function') refreshDiag();
     $('#sCheck').checked = settings.checkBeforeSend !== false;
     syncLockUI();
     $('#sAutoFill').checked = settings.autoFill !== false;
@@ -3423,7 +3430,7 @@ select, option { color-scheme: inherit; }
       var dupe = ctx === 'month' ? ticked().filter(isSent).length : 0;
       $('#mSent').textContent = prev ? 'Already sent ' + new Date(prev.sentAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' to ' + (prev.to ? prev.to.length : 0) + ' address(es).' : (dupe ? dupe + (dupe === 1 ? ' of these weeks was' : ' of these weeks were') + ' sent before.' : '');
       $('#sendBtn').textContent = (prev || dupe) ? 'Send again' : 'Send now';
-      $('#sendStatus').textContent = ''; $('#sendStatus').className = 'status';
+      $('#sendStatus').textContent = ''; $('#sendStatus').className = 'status'; $('#sentBackup').hidden = true;
       $('#mailLink').href = 'mailto:' + to.map(encodeURIComponent).join(',') + '?subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(bodyText()).replace(/%0A/g, '%0D%0A');
       $('#outlookLink').href = 'https://outlook.office.com/mail/deeplink/compose?to=' + encodeURIComponent(to.join(',')) + '&subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(bodyText()).replace(/%0A/g, '%0D%0A');
     }
@@ -3588,11 +3595,24 @@ select, option { color-scheme: inherit; }
       throw { code: 'api', status: r.status, message: (j.error && j.error.message) || '' };
     }
   }
+  function gDiagText() {
+    var c = clientId();
+    return 'Code in use: ' + (c ? c.slice(0, 12) + '…' + c.slice(-34) : 'none') + (c === DEFAULT_CLIENT ? ' (the built-in one)' : ' (not the built-in one)') + '. This app\'s address is ' + location.origin + ' and it must be listed exactly like that under Authorised JavaScript origins in Google.';
+  }
+  function refreshDiag() { var d = $('#gDiag'); if (d) d.textContent = gDiagText(); }
+  $('#gUseDefault').addEventListener('click', function () { $('#sClient').value = DEFAULT_CLIENT; settings.gClientId = DEFAULT_CLIENT; gTok = ''; gExp = 0; toast('Built-in code filled in. Press Save in Setup.'); refreshDiag(); });
+  $('#sClient').addEventListener('input', function () { settings.gClientId = this.value.trim(); gTok = ''; gExp = 0; refreshDiag(); });
+  $('#gTest').addEventListener('click', async function () {
+    var btn = this, d = $('#gDiag'); btn.disabled = true; d.textContent = 'Opening Google sign-in…';
+    try { await gToken(); d.textContent = 'Working. Google signed you in and the app can send email. ' + gDiagText(); }
+    catch (err) { d.textContent = gErrMsg(err) + ' ' + gDiagText(); }
+    finally { btn.disabled = false; }
+  });
   function gErrMsg(err) {
     var c = err && err.code;
     if (c === 'noclient') return 'Add your Google sign-in code in Setup first, or use Share to Mail or Outlook.';
     if (c === 'offline') return 'No signal. Try again when you are online, or use Share to Mail or Outlook.';
-    if (c === 'auth') return 'Google sign-in did not finish' + (err.message ? ' (' + err.message + ')' : '') + '. Try again, or use Share to Mail or Outlook.';
+    if (c === 'auth') return 'Google sign-in did not finish' + (err.message ? ' (' + err.message + ')' : '') + '. If Google showed "invalid_client" or "access blocked", the code in Setup is wrong, the wrong type, or this address is not listed in Google. Press Use the built-in code in Setup, or try again, or use Share to Mail or Outlook.';
     if (c === 'api') return 'Gmail refused it' + (err.status ? ' (' + err.status + ')' : '') + (err.message ? ': ' + err.message : '') + '. Check the Gmail API is switched on in your Google project.';
     return 'Could not send. Use Share to Mail or Outlook instead.';
   }
@@ -3694,6 +3714,8 @@ select, option { color-scheme: inherit; }
       await recordSent(to);
       mailNote = '';
       sendMsg('Sent to ' + to.length + ' address(es). Check your Gmail Sent folder to see it.', true);
+      var ds = daysSinceBackup(); $('#sentBackup').hidden = !(ds === null || ds >= 3);
+      if (!$('#sentBackup').hidden) $('#sentBackup').textContent = ds === null ? 'You have no backup yet. Email me one now' : 'Last backup was ' + ds + ' days ago. Email me one now';
       toast('Timesheet sent');
     } catch (err) { sendMsg(gErrMsg(err), false); }
     finally { btn.disabled = false; }
