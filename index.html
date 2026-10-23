@@ -1190,6 +1190,14 @@ select, option { color-scheme: inherit; }
     if (!nightOn(e)) return w;
     return Math.max(w, Math.max(0, Math.round(Number(settings.nightMin) * 60)));
   }
+  function lastWeekNote(mon, total) {
+    var cap = Math.round((Number(settings.payCap) || 0) * 60);
+    if (!cap || !mon || total < cap) return '';
+    var fri = addDays(parseISO(mon), 4);
+    if (addDays(fri, 7).getMonth() === fri.getMonth()) return '';
+    var extra = total - cap, h = (cap / 60) + ' hours';
+    return 'Final week of the month: paid at ' + h + ' this month. ' + (extra > 0 ? 'Hours worked above ' + h + ' (' + fmtHM(extra) + ') will be paid in the following month.' : 'Any hours worked above ' + h + ' will be paid in the following month.');
+  }
   var nightStar = function (e) { return nightOn(e) ? '*' : ''; };
   var nightFoot = function () { return '* Night away: paid at a minimum of ' + (Number(settings.nightMin) || 0) + ' hours.'; };
   var settings = { name: '', me: 'daniel.wade@medisafe.org.uk', office: '', defStart: '08:00', defEnd: '16:30', defBrk: 30, weekTarget: 40, payRate: 15.37, pensionPct: 4, pensionQual: true, pensionPre: false, taxCode: '509L', payCap: 40, nightMin: 9.5, paidHol: true, sickPay: 24.65, holDays: 0, holStart: 1, payModel: 2, homePostcode: '', trafficPct: 20, bufferMins: 10 };
@@ -2489,7 +2497,10 @@ select, option { color-scheme: inherit; }
         if (r.e.note) l += '   (' + r.e.note + ')';
         lines.push(l);
       });
-      lines.push('  Week total: ' + fmtHM(g.total), '');
+      lines.push('  Week total: ' + fmtHM(g.total));
+      var lwm = lastWeekNote(g.mon, g.total);
+      if (lwm) lines.push('  ' + lwm);
+      lines.push('');
       total += g.total; mTotal += g.total; days += g.worked; nights += g.nights;
     });
     closeMonth();
@@ -2505,7 +2516,7 @@ select, option { color-scheme: inherit; }
     var multi = Object.keys(seen).length > 1;
     var aoa = [['Timesheet'], ['Name', settings.name || ''], ['Period', periodLabel()], [],
       ['Day', 'Date', 'Start', 'Finish', 'Break (min)', 'Night away', 'Paid (h:mm)', 'Paid (hours)', 'Site / job']];
-    var total = 0, nights = 0, cur = null, mTotal = 0, mNights = 0;
+    var total = 0, nights = 0, cur = null, mTotal = 0, mNights = 0, notes = [];
     function closeMonth() {
       if (multi && cur !== null) aoa.push([cur + ' subtotal', '', '', '', '', mNights + ' night(s)', fmtHM(mTotal), Number(dec2(mTotal)), '']);
       mTotal = 0; mNights = 0;
@@ -2519,11 +2530,14 @@ select, option { color-scheme: inherit; }
       });
       aoa.push(['Week total', 'Week ' + g.n + ' (w/c ' + g.mon + ')', '', '', '', g.nights + ' night(s)', fmtHM(g.total), Number(dec2(g.total)), '']);
       total += g.total; nights += g.nights; mTotal += g.total; mNights += g.nights;
+      var lwx = lastWeekNote(g.mon, g.total);
+      if (lwx) notes.push(lwx);
     });
     closeMonth();
     var lastRow = aoa.length;
     aoa.push([multi ? 'Grand total' : 'Month total', '', '', '', '', nights + ' night(s)', fmtHM(total), Number(dec2(total)), '']);
     if (gs.some(function (g) { return g.days.some(function (r) { return nightOn(r.e); }); })) aoa.push([], [nightFoot()]);
+    if (notes.length) { aoa.push([]); notes.forEach(function (n) { aoa.push([n]); }); }
     return { aoa: aoa, cols: [11, 16, 8, 8, 12, 12, 14, 15, 28], formula: { cell: 'H' + (lastRow + 1), f: 'SUMIF(A6:A' + lastRow + ',"Week total",H6:H' + lastRow + ')', v: Number(dec2(total)) } };
   }
 
@@ -3497,6 +3511,8 @@ select, option { color-scheme: inherit; }
       lines.push(l);
     });
     if (w.rows.some(function (r) { return nightOn(r.e); })) lines.push('', nightFoot());
+    var lwn = lastWeekNote(iso(weekStart), w.total);
+    if (lwn) lines.push('', lwn);
     lines.push('', 'Total: ' + fmtHM(w.total) + ' (' + dec2(w.total) + ' h)', 'Days worked: ' + w.days, 'Nights away: ' + w.nights);
     if (settings.name) lines.push('', settings.name);
     return lines.join('\n');
@@ -3530,10 +3546,10 @@ select, option { color-scheme: inherit; }
   function emailHtml() {
     var groups;
     if (ctx === 'month') {
-      groups = ticked().map(function (g) { return { title: 'Week ' + g.n + ' · commencing ' + longDate(parseISO(g.mon)), month: monthName(g.fri), days: g.days, total: g.total, nights: g.nights, worked: g.worked, leave: g.leave }; });
+      groups = ticked().map(function (g) { return { title: 'Week ' + g.n + ' · commencing ' + longDate(parseISO(g.mon)), month: monthName(g.fri), days: g.days, total: g.total, nights: g.nights, worked: g.worked, leave: g.leave, mon: g.mon }; });
     } else {
       var w = weekData();
-      groups = [{ title: '', month: '', days: w.rows.filter(function (r) { return r.e; }), total: w.total, nights: w.nights, worked: w.days, leave: w.leave }];
+      groups = [{ title: '', month: '', days: w.rows.filter(function (r) { return r.e; }), total: w.total, nights: w.nights, worked: w.days, leave: w.leave, mon: iso(weekStart) }];
     }
     var seen = {};
     groups.forEach(function (g) { if (g.month) seen[g.month] = 1; });
@@ -3576,6 +3592,8 @@ select, option { color-scheme: inherit; }
         + '<td style="' + tf + 'font-weight:700;white-space:nowrap">' + hm(g.total) + '</td>'
         + '<td style="' + tf + 'color:#566676;font-size:13px">' + (g.nights ? g.nights + (g.nights === 1 ? ' night away' : ' nights away') : '') + '</td></tr>');
       out.push('</table>');
+      var lwh = lastWeekNote(g.mon, g.total);
+      if (lwh) out.push('<p style="margin:0 0 10px;padding:8px 10px;background:#eaf3f7;border-left:3px solid #0a6c8b;font-size:13px;color:#1b2733">' + esc(lwh) + '</p>');
       total += g.total; mTotal += g.total; days += g.worked; nights += g.nights; leaveN += g.leave || 0;
     });
     monthClose();
@@ -3859,6 +3877,8 @@ select, option { color-scheme: inherit; }
     aoa.push(['Total', '', '', '', '', w.nights + ' night(s)', fmtHM(w.total), Number(dec2(w.total)), '']);
     var lastDay = 5 + w.rows.length;
     if (w.rows.some(function (r) { return nightOn(r.e); })) aoa.push([], [nightFoot()]);
+    var lww = lastWeekNote(iso(weekStart), w.total);
+    if (lww) aoa.push([], [lww]);
     return { aoa: aoa, cols: [8, 12, 8, 8, 12, 12, 14, 15, 28], formula: { cell: 'H' + (lastDay + 1), f: 'SUM(H6:H' + lastDay + ')', v: Number(dec2(w.total)) } };
   }
   async function download() {
