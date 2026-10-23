@@ -1046,6 +1046,11 @@ select, option { color-scheme: inherit; }
       <button class="btn" id="ckGo">Send now</button>
       <button class="btn ghost" id="ckBack">Go back and fix</button>
     </div>
+    <div id="sheetNote" class="stack" style="gap:12px" hidden>
+      <div class="field"><label class="label" for="noteText">Add a comment (optional)</label><textarea id="noteText" rows="5" maxlength="2000" placeholder="For example a question or something the office needs to know. It goes at the top of the email, above the times."></textarea></div>
+      <button class="btn" id="noteGo">Send now</button>
+      <button class="btn ghost" id="noteBack">Go back</button>
+    </div>
     <div id="sheetBody" class="stack" style="gap:14px">
       <div class="field"><span class="label">To</span><div class="sel" id="mTo"></div></div>
       <div class="field"><span class="label">Subject</span><div class="sel" id="mSub"></div></div>
@@ -3275,7 +3280,9 @@ select, option { color-scheme: inherit; }
     if (ctx === 'month') return 'Timesheet – ' + (settings.name || 'Monthly hours') + ' – ' + periodLabel();
     return 'Timesheet – ' + (settings.name || 'Weekly hours') + ' – week commencing ' + longDate(weekStart);
   }
-  function bodyText() {
+  var mailNote = '';
+  function bodyText() { var t = bodyTextCore(); return mailNote ? mailNote + '\n\n' + t : t; }
+  function bodyTextCore() {
     if (ctx === 'month') return monthBody();
     var w = weekData();
     var lines = ['Timesheet for ' + (settings.name || 'me') + ', week commencing ' + longDate(weekStart), ''];
@@ -3298,7 +3305,7 @@ select, option { color-scheme: inherit; }
     var to = recipients();
     $('#sheetEmpty').hidden = to.length > 0;
     $('#sheetBody').hidden = to.length === 0;
-    $('#sheetCheck').hidden = true; checkProceed = null;
+    $('#sheetCheck').hidden = true; checkProceed = null; $('#sheetNote').hidden = true; mailNote = '';
     if (to.length) {
       $('#mTo').textContent = to.join(', ');
       $('#mSub').textContent = subject();
@@ -3315,7 +3322,7 @@ select, option { color-scheme: inherit; }
     $('#sheet').hidden = false;
     if (clientId()) loadGIS().catch(function () {});
   }
-  function closeEmail() { $('#sheet').hidden = true; }
+  function closeEmail() { $('#sheet').hidden = true; $('#sheetNote').hidden = true; }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function hm(m) { return Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm'; }
   function emailHtml() {
@@ -3333,6 +3340,7 @@ select, option { color-scheme: inherit; }
     var td = 'padding:8px 10px;border-bottom:1px solid #e3e8ed;font-size:14px;vertical-align:top;';
     var tf = 'padding:8px 10px;background:#f6f8fa;';
     var out = ['<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1b2733;max-width:680px;line-height:1.4">'];
+    if (mailNote) out.push('<p style="margin:0 0 20px;font-size:15px;white-space:pre-wrap">' + esc(mailNote) + '</p>');
     out.push('<h2 style="margin:0 0 4px;font-size:22px">Timesheet</h2>');
     out.push('<p style="margin:0 0 18px;color:#566676;font-size:14px">' + esc(settings.name || '') + (settings.name ? ' · ' : '') + esc(ctx === 'month' ? periodLabel() : 'Week commencing ' + longDate(weekStart)) + '</p>');
     var cur = null, total = 0, days = 0, nights = 0, mTotal = 0, leaveN = 0;
@@ -3545,6 +3553,23 @@ select, option { color-scheme: inherit; }
     if (fn) fn();
   });
 
+  /* Pop-up step: optional comment that goes above the times. */
+  function askNote() {
+    $('#noteText').value = mailNote;
+    $('#noteGo').textContent = $('#sendBtn').textContent;
+    $('#sheetBody').hidden = true; $('#sheetCheck').hidden = true; $('#sheetNote').hidden = false;
+    $('#sheetTitle').textContent = 'Add a comment';
+    setTimeout(function () { try { $('#noteText').focus(); } catch (e) {} }, 50);
+  }
+  function closeNote() { $('#sheetNote').hidden = true; $('#sheetBody').hidden = false; $('#sheetTitle').textContent = ctx === 'month' ? 'Send ticked weeks' : 'Email timesheet'; }
+  $('#noteBack').addEventListener('click', closeNote);
+  $('#noteGo').addEventListener('click', function () {
+    mailNote = $('#noteText').value.replace(/\s+$/, '').replace(/^\s+/, '');
+    closeNote();
+    $('#mBody').innerHTML = emailHtml();
+    sendNow();
+  });
+
   async function sendNow() {
     var to = recipients();
     if (!to.length) { sendMsg('Add your email in Setup first.', false); return; }
@@ -3559,6 +3584,7 @@ select, option { color-scheme: inherit; }
       sendMsg('Sending…', false);
       await gmailSend({ to: to, subject: subject(), text: bodyText(), html: emailHtml(), attach: { filename: fname(), type: XLSX_MIME, bytes: makeXlsx(buildWorkbook()) } });
       await recordSent(to);
+      mailNote = '';
       sendMsg('Sent to ' + to.length + ' address(es). Check your Gmail Sent folder to see it.', true);
       toast('Timesheet sent');
     } catch (err) { sendMsg(gErrMsg(err), false); }
@@ -3575,7 +3601,7 @@ select, option { color-scheme: inherit; }
     } catch (err) { if (!(err && err.name === 'AbortError')) sendMsg('Could not open the share sheet.', false); }
   }
   $('#shareBtn').addEventListener('click', function () { runWithCheck('Share', shareNow); });
-  $('#sendBtn').addEventListener('click', function () { runWithCheck($('#sendBtn').textContent, sendNow); });
+  $('#sendBtn').addEventListener('click', function () { runWithCheck($('#sendBtn').textContent, askNote); });
   $('#emailBtn').addEventListener('click', function () { openEmail('week'); });
   $('#sheetClose').addEventListener('click', closeEmail);
   $('#sheet').addEventListener('click', function (ev) { if (ev.target === $('#sheet')) closeEmail(); });
