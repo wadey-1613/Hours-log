@@ -628,6 +628,7 @@ select, option { color-scheme: inherit; }
         <div class="big" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="num" style="font-size:2.5rem" id="hWeekTotal">0:00</span><span class="dec" id="hWeekOf"></span></div>
         <div class="scale" aria-hidden="true"><div class="seg" id="hWeekBar" style="left:0;width:0"></div></div>
         <p class="hint" id="hWeekNote"></p>
+        <p class="hint" id="hWeekMore"></p>
       </div>
       <div class="card">
         <div class="label">Needs attention</div>
@@ -851,6 +852,11 @@ select, option { color-scheme: inherit; }
         <div class="label">Estimated take-home</div>
         <div class="num money" id="pNet">£0.00</div>
         <p class="hint" id="pHours"></p>
+      </div>
+      <div class="card" id="ytdCard">
+        <div class="label" id="ytdTitle">Tax year so far</div>
+        <div id="ytdBody"></div>
+        <p class="hint" id="ytdNote"></p>
       </div>
       <div class="card">
         <div id="pLines"></div>
@@ -1333,7 +1339,7 @@ select, option { color-scheme: inherit; }
   var normCode = function (c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); };
   function payLocked() { return !!lockCfg() && !(payUnlocked && (currentView === 'pay' || Date.now() < payGrace)); }
   function scrubPay() {
-    ['#trkBig', '#trkSub', '#trkNote', '#trkChart', '#trkBadge', '#pNet', '#pHours', '#pLines', '#pWeeks', '#slipBody', '#actDiff', '#pWarn', '#payLabel', '#slipMsg'].forEach(function (q) { var x = $(q); if (x) x.textContent = ''; });
+    ['#ytdBody', '#ytdNote', '#ytdTitle', '#trkBig', '#trkSub', '#trkNote', '#trkChart', '#trkBadge', '#pNet', '#pHours', '#pLines', '#pWeeks', '#slipBody', '#actDiff', '#pWarn', '#payLabel', '#slipMsg'].forEach(function (q) { var x = $(q); if (x) x.textContent = ''; });
     ['#actNet', '#exBonus', '#exDeduct'].forEach(function (q) { var x = $(q); if (x) x.value = ''; });
   }
   function syncLockUI() { var sw = $('#sLock'); if (sw) sw.checked = !!lockCfg(); }
@@ -2838,7 +2844,9 @@ select, option { color-scheme: inherit; }
       badge.textContent = (pc >= 0 ? '↑ +' : '↓ ') + Math.abs(pc).toFixed(1) + '%';
     } else badge.hidden = true;
     var tot = vals.reduce(function (a, x) { return a + x.v; }, 0);
-    $('#trkSub').textContent = months[trkSel].toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) + (cur.actual ? ' · actual' : ' · estimate') + (prev != null ? ' vs last month' : '');
+    var gapTxt = '';
+    if (cur.actual) { var gd = round2(cur.v - computePay(months[trkSel]).net); gapTxt = gd === 0 ? ' · matched the estimate' : ' · ' + gbp(Math.abs(gd)) + (gd > 0 ? ' more than estimated' : ' less than estimated'); }
+    $('#trkSub').textContent = months[trkSel].toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) + (cur.actual ? ' · actual' : ' · estimate') + (prev != null ? ' vs last month' : '') + gapTxt;
     $('#trkNote').textContent = 'Take-home each month, using your actual take-home where you have entered it and the estimate otherwise. Total ' + gbp(tot) + ', average ' + gbp(tot / vals.length) + ' a month. Tap the graph to look at a month.';
   }
   (function () {
@@ -2859,13 +2867,35 @@ select, option { color-scheme: inherit; }
       });
     });
   })();
+  function renderYtd() {
+    var box = $('#ytdBody'); if (!box) return;
+    box.innerHTML = '';
+    var now = new Date(), ty = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    $('#ytdTitle').textContent = 'Tax year ' + ty + '/' + String(ty + 1).slice(2) + ' so far';
+    var t = { gross: 0, tax: 0, ni: 0, pension: 0, net: 0, mins: 0 }, n = 0, gaps = [];
+    for (var m = new Date(ty, 3, 1); m <= now; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+      var c = computePay(m), rec = payslips[payKeyFor(m)] || {}, has = c.mins > 0 || c.sickPay > 0 || c.bonus > 0 || (rec.actualNet != null && rec.actualNet !== '');
+      if (!has) continue;
+      n++; t.gross += c.gross; t.tax += c.tax; t.ni += c.ni; t.pension += c.pension; t.mins += c.mins;
+      var act = rec.actualNet != null && rec.actualNet !== '' && isFinite(Number(rec.actualNet)) ? Number(rec.actualNet) : null;
+      t.net += act != null ? act : c.net;
+      if (act != null && Math.abs(act - c.net) >= 1) gaps.push(m.toLocaleDateString('en-GB', { month: 'long' }) + ' payslip was ' + gbp(Math.abs(act - c.net)) + (act > c.net ? ' more' : ' less') + ' than estimated');
+    }
+    if (!n) { $('#ytdNote').textContent = 'Nothing logged yet this tax year.'; return; }
+    box.appendChild(lineEl('Gross pay', gbp(round2(t.gross)), '', fmtHM(t.mins) + ' paid hours over ' + n + (n === 1 ? ' month' : ' months')));
+    box.appendChild(lineEl('Tax', '-' + gbp(round2(t.tax)), 'neg'));
+    box.appendChild(lineEl('National Insurance', '-' + gbp(round2(t.ni)), 'neg'));
+    box.appendChild(lineEl('Pension', '-' + gbp(round2(t.pension)), 'neg'));
+    box.appendChild(lineEl('Take-home', gbp(round2(t.net)), 'total', 'Actual where entered, estimate otherwise'));
+    $('#ytdNote').textContent = 'From 6 April. Estimates added up month by month, so the real totals on your payslips can differ.' + (gaps.length ? ' ' + gaps.join('. ') + '.' : '');
+  }
   function renderPay() {
     if (!$('#payLabel')) return;
     var lk = payLocked();
     $('#payLock').hidden = !lk; $('#payBody').hidden = lk;
     if (lk) { scrubPay(); renderHolCard(); return; }
     $('#payLabel').textContent = payStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-    renderTracker();
+    renderTracker(); renderYtd();
     var c = computePay(payStart);
     $('#pNet').textContent = gbp(c.net);
     $('#pHours').textContent = fmtHM(c.mins) + ' paid hours at ' + gbp(c.rate) + ' an hour';
@@ -3162,6 +3192,18 @@ select, option { color-scheme: inherit; }
     $('#hWeekBar').style.width = (exp ? Math.min(100, w.total / exp * 100) : 0) + '%';
     var diff = w.total - exp;
     $('#hWeekNote').textContent = w.days + (w.days === 1 ? ' day' : ' days') + ' worked' + (w.nights ? ', ' + w.nights + (w.nights === 1 ? ' night' : ' nights') + ' away' : '') + (exp ? ' · ' + (diff === 0 ? 'on target' : fmtHM(Math.abs(diff)) + (diff > 0 ? ' over' : ' to go')) : '');
+
+    var more = [], tdy = iso(now), left = 0;
+    for (var wi = 0; wi < 5; wi++) { var wk = iso(addDays(mon, wi)); if (wk < tdy) continue; var we = entries[wk]; if (we && !we.est && !isOpen(we)) continue; left++; }
+    if (exp && diff < 0 && left > 0 && Math.ceil(-diff / left) > 600) more.push(fmtHM(-diff) + ' short of your target, which is more than the days left can cover');
+    else if (exp && diff < 0 && left > 0) more.push(fmtHM(-diff) + ' over ' + left + (left === 1 ? ' day left' : ' days left') + ', about ' + fmtHM(Math.ceil(-diff / left)) + ' a day to reach your target');
+    else if (exp && diff < 0 && left === 0) more.push('Week finished ' + fmtHM(-diff) + ' under your target');
+    var capM = Math.round((Number(settings.payCap) || 0) * 60);
+    if (lastWeekMonday(now) && iso(lastWeekMonday(now)) === iso(mon) && capM > 0) {
+      var wp = weekPayMins(w);
+      more.push('Last week of the month: paid at ' + fmtHM(capM) + (wp > capM ? ', and ' + fmtHM(wp - capM) + ' of overtime carries to next month' : (wp < capM ? ' until you log more' : '')));
+    }
+    $('#hWeekMore').textContent = more.join('. ') + (more.length ? '.' : '');
 
     // needs attention
     var todo = [], box = $('#hTodo'); box.innerHTML = '';
